@@ -65,18 +65,59 @@ Future AWS implementation:
 
 Returns jobs for the operations queue.
 
-Future AWS implementation:
+Current AWS implementation:
 
 - API Gateway invokes Lambda.
-- Lambda queries DynamoDB by tenant and status.
+- Lambda scans DynamoDB with a small dev limit.
 - Results are sorted by `updatedAt`.
+
+### Request
+
+```text
+GET /jobs
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "jobs": [
+      {
+        "id": "job_...",
+        "documentType": "invoice",
+        "fileName": "supplier-invoice.pdf",
+        "status": "completed",
+        "confidence": null,
+        "createdAt": "2026-05-13T08:20:00.000Z",
+        "updatedAt": "2026-05-13T08:21:00.000Z",
+        "bucket": "docops360-dev-invoice-ingest-...",
+        "objectKey": "uploads/invoice/job_.../supplier-invoice.pdf",
+        "uploadedAt": "2026-05-13T08:20:00.000Z",
+        "processedAt": "2026-05-13T08:21:00.000Z",
+        "processingMetadata": {
+          "textractEnabled": false,
+          "textractSkipped": true
+        }
+      }
+    ]
+  },
+  "requestId": "..."
+}
+```
 
 ## Get Job
 
 Returns job detail, extraction fields, validation findings, workflow steps, and audit events.
 
-Future AWS implementation:
+Current AWS implementation:
 
-- DynamoDB stores operational status and audit history.
-- PostgreSQL stores validated business records.
-- S3 stores source documents and extraction artifacts.
+- API Gateway invokes Lambda.
+- Lambda uses DynamoDB `GetItem` by `jobId`.
+- The dashboard polls this endpoint until `completed`, `failed`, or `review_required`.
+
+### Request
+
+```text
+GET /jobs/{jobId}
+```

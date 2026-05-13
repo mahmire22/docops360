@@ -11,6 +11,7 @@ The first Terraform slice creates the foundation for document intake:
 - Lambda upload handler
 - S3 event notification for uploaded invoices
 - worker Lambda for asynchronous processing metadata updates
+- read Lambda for `GET /jobs` and `GET /jobs/{jobId}`
 - API Gateway HTTP API
 - CloudWatch log groups with 14-day retention
 

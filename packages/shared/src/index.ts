@@ -18,6 +18,8 @@ export interface DocumentJob {
   confidence: number | null;
   createdAt: string;
   updatedAt: string;
+  bucket?: string;
+  objectKey?: string;
   uploadedAt?: string;
   processedAt?: string;
   processingMetadata?: Record<string, string | number | boolean | null>;
@@ -82,4 +84,12 @@ export interface CreateUploadResponse {
 export interface JobRecord extends DocumentJob {
   bucket: string;
   objectKey: string;
+}
+
+export interface ListJobsResponse {
+  jobs: JobRecord[];
+}
+
+export interface GetJobResponse {
+  job: JobRecord;
 }

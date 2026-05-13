@@ -1,4 +1,11 @@
-import type { ApiResponse, CreateUploadRequest, CreateUploadResponse } from "@docops360/shared";
+import type {
+  ApiResponse,
+  CreateUploadRequest,
+  CreateUploadResponse,
+  GetJobResponse,
+  JobRecord,
+  ListJobsResponse
+} from "@docops360/shared";
 
 const documentBucketName = "docops360-dev-invoice-ingest-local";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
@@ -44,6 +51,8 @@ const createMockUploadRequest = async (
 
 export const getUploadMode = () => uploadMode;
 
+export const isRealMode = () => uploadMode !== "mock" && Boolean(apiBaseUrl);
+
 export const createUploadRequest = async (
   request: CreateUploadRequest
 ): Promise<ApiResponse<CreateUploadResponse>> => {
@@ -88,3 +97,35 @@ export const uploadFileToTarget = async (
     throw new Error(`S3 upload failed with ${response.status}: ${await response.text()}`);
   }
 };
+
+export const listJobsRequest = async (): Promise<ApiResponse<ListJobsResponse>> => {
+  if (!isRealMode()) {
+    return {
+      data: { jobs: [] },
+      requestId: crypto.randomUUID()
+    };
+  }
+
+  const response = await fetch(`${apiBaseUrl}/jobs`);
+  if (!response.ok) {
+    throw new Error(`List jobs failed with ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json() as Promise<ApiResponse<ListJobsResponse>>;
+};
+
+export const getJobRequest = async (jobId: string): Promise<ApiResponse<GetJobResponse>> => {
+  if (!isRealMode()) {
+    throw new Error("Job polling is disabled in mock mode.");
+  }
+
+  const response = await fetch(`${apiBaseUrl}/jobs/${encodeURIComponent(jobId)}`);
+  if (!response.ok) {
+    throw new Error(`Get job failed with ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json() as Promise<ApiResponse<GetJobResponse>>;
+};
+
+export const isTerminalStatus = (status: JobRecord["status"]) =>
+  status === "completed" || status === "failed" || status === "review_required";

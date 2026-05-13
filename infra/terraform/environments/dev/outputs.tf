@@ -22,3 +22,11 @@ output "processing_worker_name" {
   description = "Name of the invoice processing worker Lambda."
   value       = module.api.processing_worker_name
 }
+
+output "jobs_read_routes" {
+  description = "Routes used to read document jobs."
+  value = [
+    "GET ${module.api.http_api_endpoint}/jobs",
+    "GET ${module.api.http_api_endpoint}/jobs/{jobId}"
+  ]
+}

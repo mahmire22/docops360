@@ -1,6 +1,7 @@
 locals {
   upload_function_name = "${var.name_prefix}-${var.environment}-create-upload"
   worker_function_name = "${var.name_prefix}-${var.environment}-process-invoice"
+  jobs_function_name   = "${var.name_prefix}-${var.environment}-read-jobs"
 }
 
 data "archive_file" "upload_handler" {
@@ -16,6 +17,11 @@ resource "aws_cloudwatch_log_group" "upload_handler" {
 
 resource "aws_cloudwatch_log_group" "processing_worker" {
   name              = "/aws/lambda/${local.worker_function_name}"
+  retention_in_days = 14
+}
+
+resource "aws_cloudwatch_log_group" "jobs_handler" {
+  name              = "/aws/lambda/${local.jobs_function_name}"
   retention_in_days = 14
 }
 
@@ -42,6 +48,11 @@ resource "aws_iam_role" "upload_handler" {
 
 resource "aws_iam_role" "processing_worker" {
   name               = "${local.worker_function_name}-role"
+  assume_role_policy = data.aws_iam_policy_document.upload_assume_role.json
+}
+
+resource "aws_iam_role" "jobs_handler" {
+  name               = "${local.jobs_function_name}-role"
   assume_role_policy = data.aws_iam_policy_document.upload_assume_role.json
 }
 
@@ -114,6 +125,36 @@ resource "aws_iam_role_policy_attachment" "processing_worker" {
   policy_arn = aws_iam_policy.processing_worker.arn
 }
 
+data "aws_iam_policy_document" "jobs_handler" {
+  statement {
+    sid = "WriteOwnLogs"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = ["${aws_cloudwatch_log_group.jobs_handler.arn}:*"]
+  }
+
+  statement {
+    sid = "ReadJobRecords"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:Scan"
+    ]
+    resources = [var.jobs_table_arn]
+  }
+}
+
+resource "aws_iam_policy" "jobs_handler" {
+  name   = "${local.jobs_function_name}-policy"
+  policy = data.aws_iam_policy_document.jobs_handler.json
+}
+
+resource "aws_iam_role_policy_attachment" "jobs_handler" {
+  role       = aws_iam_role.jobs_handler.name
+  policy_arn = aws_iam_policy.jobs_handler.arn
+}
+
 resource "aws_lambda_function" "upload_handler" {
   function_name    = local.upload_function_name
   filename         = data.archive_file.upload_handler.output_path
@@ -161,13 +202,35 @@ resource "aws_lambda_function" "processing_worker" {
   ]
 }
 
+resource "aws_lambda_function" "jobs_handler" {
+  function_name    = local.jobs_function_name
+  filename         = data.archive_file.upload_handler.output_path
+  handler          = "lambda/jobs-handler.handler"
+  role             = aws_iam_role.jobs_handler.arn
+  runtime          = "nodejs20.x"
+  source_code_hash = data.archive_file.upload_handler.output_base64sha256
+  timeout          = 10
+  memory_size      = 256
+
+  environment {
+    variables = {
+      JOBS_TABLE_NAME = var.jobs_table_name
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.jobs_handler,
+    aws_iam_role_policy_attachment.jobs_handler
+  ]
+}
+
 resource "aws_apigatewayv2_api" "http" {
   name          = "${var.name_prefix}-${var.environment}-http-api"
   protocol_type = "HTTP"
 
   cors_configuration {
     allow_headers = ["content-type"]
-    allow_methods = ["OPTIONS", "POST"]
+    allow_methods = ["GET", "OPTIONS", "POST"]
     allow_origins = ["*"]
     max_age       = 300
   }
@@ -199,10 +262,29 @@ resource "aws_apigatewayv2_integration" "upload_handler" {
   payload_format_version = "2.0"
 }
 
+resource "aws_apigatewayv2_integration" "jobs_handler" {
+  api_id                 = aws_apigatewayv2_api.http.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.jobs_handler.invoke_arn
+  payload_format_version = "2.0"
+}
+
 resource "aws_apigatewayv2_route" "create_upload" {
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "POST /uploads"
   target    = "integrations/${aws_apigatewayv2_integration.upload_handler.id}"
+}
+
+resource "aws_apigatewayv2_route" "list_jobs" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "GET /jobs"
+  target    = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
+}
+
+resource "aws_apigatewayv2_route" "get_job" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "GET /jobs/{jobId}"
+  target    = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
 }
 
 resource "aws_lambda_permission" "allow_http_api" {
@@ -211,4 +293,12 @@ resource "aws_lambda_permission" "allow_http_api" {
   function_name = aws_lambda_function.upload_handler.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "allow_http_api_jobs" {
+  statement_id  = "AllowJobReadsFromHttpApi"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.jobs_handler.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/GET/jobs*"
 }

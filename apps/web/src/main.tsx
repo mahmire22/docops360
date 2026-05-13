@@ -1,22 +1,77 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AuditEvent, DocumentJob, InvoiceExtraction, ProcessingStep, UploadTarget, ValidationFinding } from "@docops360/shared";
-import { createUploadRequest, getUploadMode, uploadFileToTarget } from "./api";
+import type { AuditEvent, DocumentJob, InvoiceExtraction, JobRecord, ProcessingStep, UploadTarget, ValidationFinding } from "@docops360/shared";
+import {
+  createUploadRequest,
+  getJobRequest,
+  getUploadMode,
+  isRealMode,
+  isTerminalStatus,
+  listJobsRequest,
+  uploadFileToTarget
+} from "./api";
 import "./styles.css";
 
-interface OperationsJob extends DocumentJob {
+interface OperationsJob extends JobRecord {
   extraction?: InvoiceExtraction;
   findings: ValidationFinding[];
   audit: AuditEvent[];
   steps: ProcessingStep[];
-  bucket?: string;
-  objectKey?: string;
   uploadTarget?: UploadTarget;
   requestId?: string;
 }
 
+const lifecycleOrder: Array<ProcessingStep["name"]> = ["uploaded", "queued", "processing", "completed"];
+
+const statusLabel = (status: DocumentJob["status"]) => status.replace("_", " ");
+
+const nowIso = () => new Date().toISOString();
+
+const stepsForStatus = (status: DocumentJob["status"]): ProcessingStep[] => {
+  if (status === "failed") {
+    return [
+      { name: "uploaded", status: "complete" },
+      { name: "queued", status: "complete" },
+      { name: "processing", status: "blocked" },
+      { name: "completed", status: "pending" }
+    ];
+  }
+
+  if (status === "review_required") {
+    return [
+      { name: "uploaded", status: "complete" },
+      { name: "queued", status: "complete" },
+      { name: "processing", status: "blocked" },
+      { name: "review", status: "running" },
+      { name: "completed", status: "pending" }
+    ];
+  }
+
+  const currentIndex = lifecycleOrder.indexOf(status as ProcessingStep["name"]);
+
+  return lifecycleOrder.map((name, index) => ({
+    name,
+    status: index < currentIndex || status === "completed" ? "complete" : index === currentIndex ? "running" : "pending"
+  }));
+};
+
+const toOperationsJob = (job: JobRecord, previous?: OperationsJob): OperationsJob => ({
+  ...job,
+  findings: previous?.findings ?? [],
+  audit:
+    previous?.audit ??
+    [
+      { at: job.createdAt, actor: "system", message: "Job loaded from DynamoDB" },
+      { at: job.updatedAt, actor: "workflow", message: `Current lifecycle state: ${statusLabel(job.status)}` }
+    ],
+  steps: stepsForStatus(job.status),
+  uploadTarget: previous?.uploadTarget,
+  requestId: previous?.requestId,
+  extraction: previous?.extraction
+});
+
 const initialJobs: OperationsJob[] = [
-  {
+  toOperationsJob({
     id: "job_1001",
     documentType: "invoice",
     fileName: "dealer-invoice-0426.pdf",
@@ -26,37 +81,15 @@ const initialJobs: OperationsJob[] = [
     updatedAt: "2026-05-13T08:22:14.000Z",
     uploadedAt: "2026-05-13T08:20:00.000Z",
     processedAt: "2026-05-13T08:22:14.000Z",
+    bucket: "docops360-dev-invoice-ingest-local",
+    objectKey: "uploads/invoice/job_1001/dealer-invoice-0426.pdf",
     processingMetadata: {
       textractEnabled: false,
+      textractSkipped: true,
       phase: "completed"
-    },
-    extraction: {
-      supplierName: "BYD Dealer Services NL",
-      invoiceNumber: "INV-0426",
-      invoiceDate: "2026-05-02",
-      dueDate: "2026-06-01",
-      currency: "EUR",
-      netAmount: 1840,
-      taxAmount: 386.4,
-      grossAmount: 2226.4,
-      confidence: 0.94
-    },
-    findings: [
-      { field: "grossAmount", severity: "info", message: "Invoice total matched calculated net plus tax." }
-    ],
-    audit: [
-      { at: "2026-05-13T08:20:00.000Z", actor: "user", message: "Document uploaded" },
-      { at: "2026-05-13T08:20:08.000Z", actor: "workflow", message: "Queued processing workflow" },
-      { at: "2026-05-13T08:22:14.000Z", actor: "system", message: "Validated and stored invoice record" }
-    ],
-    steps: [
-      { name: "uploaded", status: "complete" },
-      { name: "queued", status: "complete" },
-      { name: "processing", status: "complete" },
-      { name: "completed", status: "complete" }
-    ]
-  },
-  {
+    }
+  }),
+  toOperationsJob({
     id: "job_1002",
     documentType: "invoice",
     fileName: "parts-supplier-tax-invoice.pdf",
@@ -65,40 +98,15 @@ const initialJobs: OperationsJob[] = [
     createdAt: "2026-05-13T08:25:00.000Z",
     updatedAt: "2026-05-13T08:27:33.000Z",
     uploadedAt: "2026-05-13T08:25:00.000Z",
+    bucket: "docops360-dev-invoice-ingest-local",
+    objectKey: "uploads/invoice/job_1002/parts-supplier-tax-invoice.pdf",
     processingMetadata: {
       textractEnabled: false,
       phase: "review_required"
     },
-    failureReason: "Gross amount confidence below review threshold",
-    extraction: {
-      supplierName: "Parts Supplier Europe",
-      invoiceNumber: "PSE-77814",
-      invoiceDate: "2026-05-06",
-      dueDate: "2026-05-30",
-      currency: "EUR",
-      netAmount: 1260,
-      taxAmount: 264.6,
-      grossAmount: 1524.6,
-      confidence: 0.71
-    },
-    findings: [
-      { field: "grossAmount", severity: "warning", message: "Total was extracted with low confidence." },
-      { field: "invoiceNumber", severity: "info", message: "Potential duplicate check returned no match." }
-    ],
-    audit: [
-      { at: "2026-05-13T08:25:00.000Z", actor: "user", message: "Document uploaded" },
-      { at: "2026-05-13T08:26:48.000Z", actor: "system", message: "Low confidence extraction detected" },
-      { at: "2026-05-13T08:27:33.000Z", actor: "workflow", message: "Routed to human review queue" }
-    ],
-    steps: [
-      { name: "uploaded", status: "complete" },
-      { name: "queued", status: "complete" },
-      { name: "processing", status: "blocked" },
-      { name: "review", status: "running" },
-      { name: "completed", status: "pending" }
-    ]
-  },
-  {
+    failureReason: "Gross amount confidence below review threshold"
+  }),
+  toOperationsJob({
     id: "job_1003",
     documentType: "invoice",
     fileName: "charging-network-invoice.pdf",
@@ -107,34 +115,30 @@ const initialJobs: OperationsJob[] = [
     createdAt: "2026-05-13T08:33:00.000Z",
     updatedAt: "2026-05-13T08:34:10.000Z",
     uploadedAt: "2026-05-13T08:33:00.000Z",
+    bucket: "docops360-dev-invoice-ingest-local",
+    objectKey: "uploads/invoice/job_1003/charging-network-invoice.pdf",
     processingMetadata: {
       textractEnabled: false,
       phase: "processing"
-    },
-    findings: [],
-    audit: [
-      { at: "2026-05-13T08:33:00.000Z", actor: "user", message: "Document uploaded" },
-      { at: "2026-05-13T08:34:10.000Z", actor: "workflow", message: "Invoice processing in progress" }
-    ],
-    steps: [
-      { name: "uploaded", status: "complete" },
-      { name: "queued", status: "complete" },
-      { name: "processing", status: "running" },
-      { name: "completed", status: "pending" }
-    ]
-  }
+    }
+  })
 ];
 
-const statusLabel = (status: DocumentJob["status"]) => status.replace("_", " ");
+const formatTime = (value?: string) => (value ? new Date(value).toLocaleTimeString() : "Pending");
+
+const metadataEntries = (job: OperationsJob) =>
+  Object.entries(job.processingMetadata ?? {}).map(([key, value]) => [key, String(value)] as const);
 
 function App() {
   const [jobs, setJobs] = useState<OperationsJob[]>(initialJobs);
-  const [selectedJobId, setSelectedJobId] = useState(initialJobs[1].id);
+  const [selectedJobId, setSelectedJobId] = useState(initialJobs[0].id);
   const [uploadStatus, setUploadStatus] = useState(`Ready for invoice intake (${getUploadMode()} mode)`);
+  const [jobSource, setJobSource] = useState(isRealMode() ? "Live job read API" : "Local mock mode");
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0];
   const completed = jobs.filter((job) => job.status === "completed").length;
   const review = jobs.filter((job) => job.status === "review_required").length;
-  const processing = jobs.filter((job) => ["queued", "processing"].includes(job.status)).length;
+  const processing = jobs.filter((job) => ["queued", "processing", "uploaded"].includes(job.status)).length;
+  const failed = jobs.filter((job) => job.status === "failed").length;
   const averageConfidence = useMemo(() => {
     const scoredJobs = jobs.filter((job) => job.confidence !== null);
     if (scoredJobs.length === 0) {
@@ -144,6 +148,65 @@ function App() {
     const total = scoredJobs.reduce((sum, job) => sum + (job.confidence ?? 0), 0);
     return `${Math.round((total / scoredJobs.length) * 100)}%`;
   }, [jobs]);
+
+  useEffect(() => {
+    if (!isRealMode()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadJobs = async () => {
+      try {
+        const response = await listJobsRequest();
+        if (cancelled) {
+          return;
+        }
+
+        setJobs((currentJobs) => {
+          const byId = new Map(currentJobs.map((job) => [job.id, job]));
+          const nextJobs = response.data.jobs.map((job) => toOperationsJob(job, byId.get(job.id)));
+          return nextJobs.length > 0 ? nextJobs : currentJobs;
+        });
+      } catch (error) {
+        setJobSource("Local fallback until read API is deployed");
+        setUploadStatus(
+          error instanceof Error
+            ? `Read API unavailable; using local fallback (${error.message})`
+            : "Read API unavailable; using local fallback"
+        );
+      }
+    };
+
+    void loadJobs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const pollJobUntilTerminal = async (jobId: string) => {
+    if (!isRealMode()) {
+      return;
+    }
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      const response = await getJobRequest(jobId);
+      const updatedJob = response.data.job;
+
+      setJobs((currentJobs) =>
+        currentJobs.map((job) => (job.id === jobId ? toOperationsJob(updatedJob, job) : job))
+      );
+      setUploadStatus(`Job ${jobId} is ${statusLabel(updatedJob.status)}`);
+
+      if (isTerminalStatus(updatedJob.status)) {
+        return;
+      }
+    }
+
+    setUploadStatus(`Polling paused for ${jobId}; refresh jobs to continue.`);
+  };
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -165,40 +228,40 @@ function App() {
       setUploadStatus("Uploading file to ingest bucket...");
       await uploadFileToTarget(file, upload.data.uploadTarget.uploadUrl, contentType);
 
-      const now = upload.data.job.createdAt;
-      const uploadedAt = new Date().toISOString();
-      const newJob: OperationsJob = {
-        ...upload.data.job,
-        status: "queued",
-        uploadedAt,
-        updatedAt: uploadedAt,
-        processingMetadata: {
-          textractEnabled: false,
-          phase: "queued"
+      const uploadedAt = nowIso();
+      const newJob = toOperationsJob(
+        {
+          ...upload.data.job,
+          status: "queued",
+          uploadedAt,
+          updatedAt: uploadedAt,
+          bucket: upload.data.uploadTarget.bucketName,
+          objectKey: upload.data.uploadTarget.objectKey,
+          processingMetadata: {
+            textractEnabled: false,
+            phase: "queued"
+          }
         },
-        findings: [],
-        audit: [
-          { at: now, actor: "user", message: "Document selected in local dashboard" },
-          { at: now, actor: "workflow", message: "Upload request created for S3 intake" },
-          { at: now, actor: "system", message: `Object key reserved: ${upload.data.uploadTarget.objectKey}` },
-          { at: uploadedAt, actor: "system", message: "File uploaded to ingest target" },
-          { at: uploadedAt, actor: "workflow", message: "S3 event queued asynchronous processing" }
-        ],
-        steps: [
-          { name: "uploaded", status: "complete" },
-          { name: "queued", status: "running" },
-          { name: "processing", status: "pending" },
-          { name: "completed", status: "pending" }
-        ],
-        bucket: upload.data.uploadTarget.bucketName,
-        objectKey: upload.data.uploadTarget.objectKey,
-        uploadTarget: upload.data.uploadTarget,
-        requestId: upload.requestId
-      };
+        {
+          ...upload.data.job,
+          bucket: upload.data.uploadTarget.bucketName,
+          objectKey: upload.data.uploadTarget.objectKey,
+          findings: [],
+          steps: stepsForStatus("queued"),
+          uploadTarget: upload.data.uploadTarget,
+          requestId: upload.requestId,
+          audit: [
+            { at: upload.data.job.createdAt, actor: "workflow", message: "Upload request created" },
+            { at: uploadedAt, actor: "system", message: "File uploaded to S3 ingest bucket" },
+            { at: uploadedAt, actor: "workflow", message: "Polling job status from DynamoDB" }
+          ]
+        }
+      );
 
-      setJobs((currentJobs) => [newJob, ...currentJobs]);
+      setJobs((currentJobs) => [newJob, ...currentJobs.filter((job) => job.id !== newJob.id)]);
       setSelectedJobId(newJob.id);
-      setUploadStatus(`Uploaded invoice ${newJob.id} via ${upload.data.uploadTarget.method}`);
+      setUploadStatus(`Uploaded invoice ${newJob.id}; waiting for worker`);
+      void pollJobUntilTerminal(newJob.id);
     } catch (error) {
       setUploadStatus(error instanceof Error ? error.message : "Upload failed");
     }
@@ -211,11 +274,11 @@ function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">DocOps360</p>
-          <h1>Intelligent document operations</h1>
+          <h1>Document operations dashboard</h1>
           <p className="hero-note">{uploadStatus}</p>
         </div>
         <label className="upload-control">
-          Upload document
+          Upload invoice
           <input accept=".pdf,.png,.jpg,.jpeg,.tiff" type="file" onChange={handleUpload} />
         </label>
       </header>
@@ -231,15 +294,19 @@ function App() {
         </article>
         <article>
           <span>{processing}</span>
-          <p>Processing</p>
+          <p>Active</p>
         </article>
         <article>
           <span>{review}</span>
           <p>Needs review</p>
         </article>
         <article>
+          <span>{failed}</span>
+          <p>Failed</p>
+        </article>
+        <article>
           <span>{averageConfidence}</span>
-          <p>Average confidence</p>
+          <p>Avg confidence</p>
         </article>
       </section>
 
@@ -248,9 +315,9 @@ function App() {
           <div className="panel-heading">
             <div>
               <p className="eyebrow">Operations Queue</p>
-              <h2 id="jobs-title">Invoice processing jobs</h2>
+              <h2 id="jobs-title">Invoice jobs</h2>
             </div>
-            <p>Mock data now, AWS pipeline next.</p>
+            <p>{jobSource}</p>
           </div>
 
           <div className="job-list">
@@ -263,11 +330,11 @@ function App() {
               >
                 <div>
                   <h3>{job.fileName}</h3>
-                  <p>{job.id} | {job.documentType}</p>
+                  <p>{job.id}</p>
                 </div>
                 <span className={`status ${job.status}`}>{statusLabel(job.status)}</span>
-                <span>{job.confidence === null ? "Pending" : `${Math.round(job.confidence * 100)}% confidence`}</span>
-                <span>{new Date(job.updatedAt).toLocaleTimeString()}</span>
+                <span>{job.documentType}</span>
+                <span>{formatTime(job.updatedAt)}</span>
               </button>
             ))}
           </div>
@@ -283,112 +350,72 @@ function App() {
           </div>
 
           <div className="detail-section">
-            <h3>Workflow</h3>
-            <div className="step-list">
+            <h3>Lifecycle</h3>
+            <div className="timeline">
               {selectedJob.steps.map((step) => (
-                <span className={`step ${step.status}`} key={`${selectedJob.id}-${step.name}`}>
-                  {step.name}
-                </span>
+                <div className={`timeline-step ${step.status}`} key={`${selectedJob.id}-${step.name}`}>
+                  <span>{step.name}</span>
+                </div>
               ))}
             </div>
           </div>
 
           <div className="detail-section">
-            <h3>Storage target</h3>
-            {selectedJob.uploadTarget ? (
-              <dl className="field-grid">
-                <div>
-                  <dt>Bucket</dt>
-                  <dd>{selectedJob.uploadTarget.bucketName}</dd>
-                </div>
-                <div>
-                  <dt>Method</dt>
-                  <dd>{selectedJob.uploadTarget.method}</dd>
-                </div>
-                <div className="wide-field">
-                  <dt>Object key</dt>
-                  <dd>{selectedJob.uploadTarget.objectKey}</dd>
-                </div>
-                <div>
-                  <dt>Request id</dt>
-                  <dd>{selectedJob.requestId}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p>Existing mock job. New uploads will reserve a storage key here.</p>
-            )}
-          </div>
-
-          <div className="detail-section">
-            <h3>Lifecycle</h3>
+            <h3>Core fields</h3>
             <dl className="field-grid">
+              <div>
+                <dt>Job ID</dt>
+                <dd>{selectedJob.id}</dd>
+              </div>
+              <div>
+                <dt>Document type</dt>
+                <dd>{selectedJob.documentType}</dd>
+              </div>
               <div>
                 <dt>Status</dt>
                 <dd>{statusLabel(selectedJob.status)}</dd>
               </div>
               <div>
-                <dt>Uploaded</dt>
-                <dd>{selectedJob.uploadedAt ? new Date(selectedJob.uploadedAt).toLocaleTimeString() : "Pending"}</dd>
-              </div>
-              <div>
-                <dt>Processed</dt>
-                <dd>{selectedJob.processedAt ? new Date(selectedJob.processedAt).toLocaleTimeString() : "Pending"}</dd>
-              </div>
-              <div>
                 <dt>Textract</dt>
                 <dd>{selectedJob.processingMetadata?.textractEnabled ? "Enabled" : "Disabled"}</dd>
               </div>
+              <div>
+                <dt>Uploaded</dt>
+                <dd>{formatTime(selectedJob.uploadedAt)}</dd>
+              </div>
+              <div>
+                <dt>Processed</dt>
+                <dd>{formatTime(selectedJob.processedAt)}</dd>
+              </div>
               <div className="wide-field">
-                <dt>Latest processing phase</dt>
-                <dd>{String(selectedJob.processingMetadata?.phase ?? selectedJob.status)}</dd>
+                <dt>Bucket</dt>
+                <dd>{selectedJob.bucket || selectedJob.uploadTarget?.bucketName || "Pending"}</dd>
+              </div>
+              <div className="wide-field">
+                <dt>Object key</dt>
+                <dd>{selectedJob.objectKey || selectedJob.uploadTarget?.objectKey || "Pending"}</dd>
               </div>
             </dl>
           </div>
 
           <div className="detail-section">
-            <h3>Extracted invoice fields</h3>
-            {selectedJob.extraction ? (
-              <dl className="field-grid">
-                <div>
-                  <dt>Supplier</dt>
-                  <dd>{selectedJob.extraction.supplierName}</dd>
-                </div>
-                <div>
-                  <dt>Invoice number</dt>
-                  <dd>{selectedJob.extraction.invoiceNumber}</dd>
-                </div>
-                <div>
-                  <dt>Gross amount</dt>
-                  <dd>{selectedJob.extraction.currency} {selectedJob.extraction.grossAmount?.toLocaleString()}</dd>
-                </div>
-                <div>
-                  <dt>Due date</dt>
-                  <dd>{selectedJob.extraction.dueDate}</dd>
-                </div>
+            <h3>Processing metadata</h3>
+            {metadataEntries(selectedJob).length > 0 ? (
+              <dl className="metadata-grid">
+                {metadataEntries(selectedJob).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{key}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
               </dl>
             ) : (
-              <p>Extraction fields will appear when the workflow reaches validation.</p>
+              <p>No processing metadata yet.</p>
             )}
           </div>
 
           <div className="detail-section">
-            <h3>Validation findings</h3>
-            {selectedJob.findings.length > 0 ? (
-              <ul className="finding-list">
-                {selectedJob.findings.map((finding) => (
-                  <li className={finding.severity} key={`${finding.field}-${finding.message}`}>
-                    <strong>{finding.field}</strong>
-                    <span>{finding.message}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>No validation findings yet.</p>
-            )}
-          </div>
-
-          <div className="detail-section">
-            <h3>Audit trail</h3>
+            <h3>Upload status timeline</h3>
             <ol className="audit-list">
               {selectedJob.audit.map((event) => (
                 <li key={`${event.at}-${event.message}`}>

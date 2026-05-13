@@ -44,6 +44,7 @@ The current worker is intentionally lightweight and low cost:
 - reads object metadata with S3 `HeadObject`
 - parses `jobId` from the object key
 - updates DynamoDB through `uploaded`, `queued`, `processing`, `completed`, or `failed`
+- exposes read APIs through `GET /jobs` and `GET /jobs/{jobId}`
 - writes structured JSON logs to CloudWatch
 - keeps `ENABLE_TEXTRACT=false`
 

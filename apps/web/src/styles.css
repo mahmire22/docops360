@@ -11,7 +11,9 @@
 
 body {
   margin: 0;
-  background: #071113;
+  background:
+    linear-gradient(180deg, rgba(122, 215, 182, 0.05), transparent 260px),
+    #071113;
 }
 
 button,
@@ -47,7 +49,7 @@ button,
 .shell {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 32px 0;
+  padding: 32px 0 56px;
 }
 
 .topbar,
@@ -60,7 +62,7 @@ button,
 }
 
 .topbar {
-  padding-bottom: 28px;
+  padding: 0 0 28px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
@@ -82,7 +84,8 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: clamp(2.4rem, 6vw, 5rem);
+  max-width: 760px;
+  font-size: clamp(2.3rem, 5vw, 4.7rem);
   line-height: 0.95;
 }
 
@@ -106,7 +109,7 @@ p {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 1rem;
   padding: 28px 0;
 }
@@ -120,6 +123,7 @@ p {
 
 .metrics article {
   padding: 1rem;
+  min-height: 116px;
 }
 
 .metrics span {
@@ -137,6 +141,7 @@ p {
 
 .panel {
   overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.16);
 }
 
 .panel-heading {
@@ -150,13 +155,17 @@ p {
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.58fr);
+  grid-template-columns: minmax(0, 0.92fr) minmax(420px, 0.68fr);
   gap: 1rem;
   align-items: start;
 }
 
 .job-row {
   width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) auto auto auto;
+  align-items: center;
+  gap: 1rem;
   padding: 1rem 1.2rem;
   border: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
@@ -221,22 +230,28 @@ p {
   border-bottom: 0;
 }
 
-.step-list,
 .field-grid,
+.metadata-grid,
 .finding-list,
-.audit-list {
+.audit-list,
+.timeline {
   margin: 0;
 }
 
-.step-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
+.timeline {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
 }
 
-.step {
-  padding: 0.3rem 0.5rem;
-  border-radius: 999px;
+.timeline-step {
+  position: relative;
+  display: grid;
+  min-height: 72px;
+  align-content: end;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
   color: #a9b8b3;
   font-size: 0.78rem;
@@ -244,44 +259,53 @@ p {
   text-transform: capitalize;
 }
 
-.step.complete {
+.timeline-step.complete {
   background: rgba(122, 215, 182, 0.16);
   color: #7ad7b6;
 }
 
-.step.running {
+.timeline-step.running {
   background: rgba(242, 189, 103, 0.16);
   color: #f2bd67;
 }
 
-.step.blocked {
+.timeline-step.blocked {
   background: rgba(255, 112, 112, 0.16);
   color: #ff9a9a;
 }
 
-.field-grid {
+.field-grid,
+.metadata-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.8rem;
 }
 
-.field-grid div {
+.metadata-grid {
+  grid-template-columns: 1fr;
+}
+
+.field-grid div,
+.metadata-grid div {
   padding: 0.85rem;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   min-width: 0;
 }
 
-.field-grid .wide-field {
+.field-grid .wide-field,
+.metadata-grid .wide-field {
   grid-column: 1 / -1;
 }
 
-.field-grid dt {
+.field-grid dt,
+.metadata-grid dt {
   color: #a9b8b3;
   font-size: 0.78rem;
 }
 
-.field-grid dd {
+.field-grid dd,
+.metadata-grid dd {
   margin: 0.2rem 0 0;
   color: #f6f7f2;
   font-weight: 800;
@@ -323,8 +347,7 @@ p {
 
 @media (max-width: 760px) {
   .topbar,
-  .panel-heading,
-  .job-row {
+  .panel-heading {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -334,7 +357,9 @@ p {
   }
 
   .workspace-grid,
-  .field-grid {
+  .field-grid,
+  .timeline,
+  .job-row {
     grid-template-columns: 1fr;
   }
 
