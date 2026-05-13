@@ -1,0 +1,19 @@
+{
+  "name": "docops360",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloud-native intelligent document operations platform.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/web",
+    "build": "npm run build -w @docops360/shared && npm run build -w @docops360/api && npm run build -w @docops360/web",
+    "typecheck": "npm run typecheck -w @docops360/shared && npm run typecheck -w @docops360/api && npm run typecheck -w @docops360/web",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
