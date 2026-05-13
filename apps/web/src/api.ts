@@ -1,6 +1,6 @@
 import type { ApiResponse, CreateUploadRequest, CreateUploadResponse } from "@docops360/shared";
 
-const documentBucketName = "docops360-dev-documents-local";
+const documentBucketName = "docops360-dev-invoice-ingest-local";
 
 const normaliseFileName = (fileName: string) =>
   fileName

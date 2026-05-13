@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "documents" {
-  bucket = "${var.name_prefix}-${var.environment}-documents-${data.aws_caller_identity.current.account_id}"
+  bucket = "${var.name_prefix}-${var.environment}-invoice-ingest-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket_public_access_block" "documents" {
@@ -26,6 +26,18 @@ resource "aws_s3_bucket_versioning" "documents" {
 
   versioning_configuration {
     status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_cors_configuration" "documents" {
+  bucket = aws_s3_bucket.documents.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT"]
+    allowed_origins = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 300
   }
 }
 

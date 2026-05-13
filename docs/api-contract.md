@@ -4,6 +4,8 @@ This contract describes the first product slice: authenticated document intake a
 
 The current implementation uses a local mock client with the same shapes that the AWS API will return later. That lets the dashboard and shared types mature before the cloud resources are applied.
 
+Development AWS region: `us-east-1`.
+
 ## Create Upload
 
 Creates a document job and returns an upload target.
@@ -42,8 +44,8 @@ Future AWS implementation:
       "updatedAt": "2026-05-13T08:20:00.000Z"
     },
     "uploadTarget": {
-      "method": "presigned_post",
-      "bucketName": "docops360-dev-documents-...",
+      "method": "presigned_put",
+      "bucketName": "docops360-dev-invoice-ingest-...",
       "objectKey": "uploads/invoice/job_.../supplier-invoice.pdf",
       "uploadUrl": "https://...",
       "expiresAt": "2026-05-13T08:30:00.000Z"

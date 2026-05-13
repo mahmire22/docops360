@@ -1,6 +1,6 @@
 export type DocumentType = "invoice" | "warranty_claim" | "service_report" | "dealer_document";
 
-export type UploadMethod = "mock" | "presigned_post";
+export type UploadMethod = "mock" | "presigned_put";
 
 export type JobStatus =
   | "uploaded"

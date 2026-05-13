@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.7"
+    }
   }
 }
 
@@ -27,4 +31,16 @@ module "storage" {
 
   environment = var.environment
   name_prefix = var.name_prefix
+}
+
+module "api" {
+  source = "../../modules/api"
+
+  document_bucket_arn        = module.storage.document_bucket_arn
+  document_bucket_name       = module.storage.document_bucket_name
+  environment                = var.environment
+  jobs_table_arn             = module.storage.jobs_table_arn
+  jobs_table_name            = module.storage.jobs_table_name
+  name_prefix                = var.name_prefix
+  upload_url_expires_seconds = var.upload_url_expires_seconds
 }

@@ -1,29 +1,34 @@
-variable "aws_region" {
-  description = "AWS region for the development environment."
+variable "document_bucket_arn" {
+  description = "ARN of the S3 ingest bucket."
   type        = string
-  default     = "us-east-1"
 }
 
-variable "aws_profile" {
-  description = "Local AWS CLI profile used by Terraform."
+variable "document_bucket_name" {
+  description = "Name of the S3 ingest bucket."
   type        = string
-  default     = "docops360-dev"
 }
 
 variable "environment" {
   description = "Deployment environment name."
   type        = string
-  default     = "dev"
+}
+
+variable "jobs_table_arn" {
+  description = "ARN of the DynamoDB jobs table."
+  type        = string
+}
+
+variable "jobs_table_name" {
+  description = "Name of the DynamoDB jobs table."
+  type        = string
 }
 
 variable "name_prefix" {
   description = "Prefix used for DocOps360 AWS resources."
   type        = string
-  default     = "docops360"
 }
 
 variable "upload_url_expires_seconds" {
   description = "How long presigned upload URLs remain valid."
   type        = number
-  default     = 600
 }

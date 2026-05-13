@@ -4,14 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && esbuild src/lambda/upload-handler.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/lambda/upload-handler.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1045.0",
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/s3-request-presigner": "^3.1045.0",
+    "@aws-sdk/util-dynamodb": "^3.996.2",
     "@docops360/shared": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^25.7.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.5.4"
   }
 }

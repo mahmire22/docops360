@@ -15,6 +15,7 @@ Users upload invoices, warranty claims, service reports, or dealer documents. Th
 - Mock document-processing workflow for local development
 - Terraform foundation for AWS
 - AWS profile: `docops360-dev`
+- AWS region: `us-east-1`
 - First target document type: invoices
 
 ## Planned AWS Architecture
@@ -45,6 +46,7 @@ infra/
 docs/
   architecture.md   Architecture narrative
   api-contract.md   API request and response shapes
+  environment.md    Local environment and AWS profile notes
   next-steps.md     Build guide
 ```
 
