@@ -8,6 +8,8 @@ DocOps360 uses local AWS CLI profiles. Do not paste, store, print, or commit AWS
 AWS_PROFILE=docops360-dev
 AWS_REGION=us-east-1
 DOCOPS360_ENV=dev
+VITE_API_BASE_URL=https://v9lqv2g88e.execute-api.us-east-1.amazonaws.com
+VITE_UPLOAD_MODE=real
 ```
 
 Verify the profile locally:
@@ -41,3 +43,19 @@ The next infrastructure slice is scaffold-only until reviewed:
 - API Gateway HTTP API
 - CloudWatch log groups
 - least-privilege IAM role and policy for upload handling
+
+## Frontend Upload Modes
+
+The web app supports both real AWS uploads and local mock uploads.
+
+Use real dev mode:
+
+```bash
+VITE_API_BASE_URL=https://v9lqv2g88e.execute-api.us-east-1.amazonaws.com VITE_UPLOAD_MODE=real npm run dev
+```
+
+Use mock fallback mode:
+
+```bash
+VITE_UPLOAD_MODE=mock npm run dev
+```

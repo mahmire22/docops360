@@ -6,6 +6,12 @@ The current implementation uses a local mock client with the same shapes that th
 
 Development AWS region: `us-east-1`.
 
+Development API base URL:
+
+```text
+https://v9lqv2g88e.execute-api.us-east-1.amazonaws.com
+```
+
 ## Create Upload
 
 Creates a document job and returns an upload target.

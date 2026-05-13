@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AuditEvent, DocumentJob, InvoiceExtraction, ProcessingStep, UploadTarget, ValidationFinding } from "@docops360/shared";
-import { createUploadRequest } from "./api";
+import { createUploadRequest, getUploadMode, uploadFileToTarget } from "./api";
 import "./styles.css";
 
 interface OperationsJob extends DocumentJob {
@@ -117,7 +117,7 @@ const statusLabel = (status: DocumentJob["status"]) => status.replace("_", " ");
 function App() {
   const [jobs, setJobs] = useState<OperationsJob[]>(initialJobs);
   const [selectedJobId, setSelectedJobId] = useState(initialJobs[1].id);
-  const [uploadStatus, setUploadStatus] = useState("Ready for invoice intake");
+  const [uploadStatus, setUploadStatus] = useState(`Ready for invoice intake (${getUploadMode()} mode)`);
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0];
   const completed = jobs.filter((job) => job.status === "completed").length;
   const review = jobs.filter((job) => job.status === "review_required").length;
@@ -138,38 +138,50 @@ function App() {
       return;
     }
 
+    const contentType = file.type || "application/pdf";
     setUploadStatus("Creating upload request...");
-    const upload = await createUploadRequest({
-      documentType: "invoice",
-      fileName: file.name,
-      contentType: file.type || "application/octet-stream",
-      sizeBytes: file.size
-    });
-    const now = upload.data.job.createdAt;
-    const newJob: OperationsJob = {
-      ...upload.data.job,
-      findings: [],
-      audit: [
-        { at: now, actor: "user", message: "Document selected in local dashboard" },
-        { at: now, actor: "workflow", message: "Upload request created for S3 intake" },
-        { at: now, actor: "system", message: `Object key reserved: ${upload.data.uploadTarget.objectKey}` }
-      ],
-      steps: [
-        { name: "ingest", status: "complete" },
-        { name: "classify", status: "pending" },
-        { name: "extract", status: "pending" },
-        { name: "validate", status: "pending" },
-        { name: "persist", status: "pending" }
-      ],
-      sourceBucket: upload.data.uploadTarget.bucketName,
-      sourceObjectKey: upload.data.uploadTarget.objectKey,
-      uploadTarget: upload.data.uploadTarget,
-      requestId: upload.requestId
-    };
 
-    setJobs((currentJobs) => [newJob, ...currentJobs]);
-    setSelectedJobId(newJob.id);
-    setUploadStatus(`Created ${upload.data.uploadTarget.method} upload target`);
+    try {
+      const upload = await createUploadRequest({
+        documentType: "invoice",
+        fileName: file.name,
+        contentType,
+        sizeBytes: file.size
+      });
+
+      setUploadStatus("Uploading file to ingest bucket...");
+      await uploadFileToTarget(file, upload.data.uploadTarget.uploadUrl, contentType);
+
+      const now = upload.data.job.createdAt;
+      const newJob: OperationsJob = {
+        ...upload.data.job,
+        findings: [],
+        audit: [
+          { at: now, actor: "user", message: "Document selected in local dashboard" },
+          { at: now, actor: "workflow", message: "Upload request created for S3 intake" },
+          { at: now, actor: "system", message: `Object key reserved: ${upload.data.uploadTarget.objectKey}` },
+          { at: new Date().toISOString(), actor: "system", message: "File uploaded to ingest target" }
+        ],
+        steps: [
+          { name: "ingest", status: "complete" },
+          { name: "classify", status: "pending" },
+          { name: "extract", status: "pending" },
+          { name: "validate", status: "pending" },
+          { name: "persist", status: "pending" }
+        ],
+        sourceBucket: upload.data.uploadTarget.bucketName,
+        sourceObjectKey: upload.data.uploadTarget.objectKey,
+        uploadTarget: upload.data.uploadTarget,
+        requestId: upload.requestId
+      };
+
+      setJobs((currentJobs) => [newJob, ...currentJobs]);
+      setSelectedJobId(newJob.id);
+      setUploadStatus(`Uploaded invoice ${newJob.id} via ${upload.data.uploadTarget.method}`);
+    } catch (error) {
+      setUploadStatus(error instanceof Error ? error.message : "Upload failed");
+    }
+
     event.target.value = "";
   };
 
