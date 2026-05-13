@@ -7,3 +7,13 @@ output "upload_lambda_name" {
   description = "Name of the upload Lambda function."
   value       = aws_lambda_function.upload_handler.function_name
 }
+
+output "processing_worker_arn" {
+  description = "ARN of the invoice processing worker Lambda function."
+  value       = aws_lambda_function.processing_worker.arn
+}
+
+output "processing_worker_name" {
+  description = "Name of the invoice processing worker Lambda function."
+  value       = aws_lambda_function.processing_worker.function_name
+}

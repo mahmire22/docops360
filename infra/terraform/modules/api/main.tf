@@ -1,5 +1,6 @@
 locals {
   upload_function_name = "${var.name_prefix}-${var.environment}-create-upload"
+  worker_function_name = "${var.name_prefix}-${var.environment}-process-invoice"
 }
 
 data "archive_file" "upload_handler" {
@@ -10,6 +11,11 @@ data "archive_file" "upload_handler" {
 
 resource "aws_cloudwatch_log_group" "upload_handler" {
   name              = "/aws/lambda/${local.upload_function_name}"
+  retention_in_days = 14
+}
+
+resource "aws_cloudwatch_log_group" "processing_worker" {
+  name              = "/aws/lambda/${local.worker_function_name}"
   retention_in_days = 14
 }
 
@@ -31,6 +37,11 @@ data "aws_iam_policy_document" "upload_assume_role" {
 
 resource "aws_iam_role" "upload_handler" {
   name               = "${local.upload_function_name}-role"
+  assume_role_policy = data.aws_iam_policy_document.upload_assume_role.json
+}
+
+resource "aws_iam_role" "processing_worker" {
+  name               = "${local.worker_function_name}-role"
   assume_role_policy = data.aws_iam_policy_document.upload_assume_role.json
 }
 
@@ -70,6 +81,39 @@ resource "aws_iam_role_policy_attachment" "upload_handler" {
   policy_arn = aws_iam_policy.upload_handler.arn
 }
 
+data "aws_iam_policy_document" "processing_worker" {
+  statement {
+    sid = "WriteOwnLogs"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = ["${aws_cloudwatch_log_group.processing_worker.arn}:*"]
+  }
+
+  statement {
+    sid       = "ReadInvoiceUploadObjects"
+    actions   = ["s3:GetObject"]
+    resources = ["${var.document_bucket_arn}/uploads/invoice/*"]
+  }
+
+  statement {
+    sid       = "UpdateJobLifecycle"
+    actions   = ["dynamodb:UpdateItem"]
+    resources = [var.jobs_table_arn]
+  }
+}
+
+resource "aws_iam_policy" "processing_worker" {
+  name   = "${local.worker_function_name}-policy"
+  policy = data.aws_iam_policy_document.processing_worker.json
+}
+
+resource "aws_iam_role_policy_attachment" "processing_worker" {
+  role       = aws_iam_role.processing_worker.name
+  policy_arn = aws_iam_policy.processing_worker.arn
+}
+
 resource "aws_lambda_function" "upload_handler" {
   function_name    = local.upload_function_name
   filename         = data.archive_file.upload_handler.output_path
@@ -91,6 +135,29 @@ resource "aws_lambda_function" "upload_handler" {
   depends_on = [
     aws_cloudwatch_log_group.upload_handler,
     aws_iam_role_policy_attachment.upload_handler
+  ]
+}
+
+resource "aws_lambda_function" "processing_worker" {
+  function_name    = local.worker_function_name
+  filename         = data.archive_file.upload_handler.output_path
+  handler          = "lambda/processing-worker.handler"
+  role             = aws_iam_role.processing_worker.arn
+  runtime          = "nodejs20.x"
+  source_code_hash = data.archive_file.upload_handler.output_base64sha256
+  timeout          = 15
+  memory_size      = 256
+
+  environment {
+    variables = {
+      ENABLE_TEXTRACT = "false"
+      JOBS_TABLE_NAME = var.jobs_table_name
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.processing_worker,
+    aws_iam_role_policy_attachment.processing_worker
   ]
 }
 

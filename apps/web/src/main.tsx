@@ -9,8 +9,8 @@ interface OperationsJob extends DocumentJob {
   findings: ValidationFinding[];
   audit: AuditEvent[];
   steps: ProcessingStep[];
-  sourceBucket?: string;
-  sourceObjectKey?: string;
+  bucket?: string;
+  objectKey?: string;
   uploadTarget?: UploadTarget;
   requestId?: string;
 }
@@ -24,6 +24,12 @@ const initialJobs: OperationsJob[] = [
     confidence: 0.94,
     createdAt: "2026-05-13T08:20:00.000Z",
     updatedAt: "2026-05-13T08:22:14.000Z",
+    uploadedAt: "2026-05-13T08:20:00.000Z",
+    processedAt: "2026-05-13T08:22:14.000Z",
+    processingMetadata: {
+      textractEnabled: false,
+      phase: "completed"
+    },
     extraction: {
       supplierName: "BYD Dealer Services NL",
       invoiceNumber: "INV-0426",
@@ -40,15 +46,14 @@ const initialJobs: OperationsJob[] = [
     ],
     audit: [
       { at: "2026-05-13T08:20:00.000Z", actor: "user", message: "Document uploaded" },
-      { at: "2026-05-13T08:20:08.000Z", actor: "workflow", message: "Queued extraction workflow" },
+      { at: "2026-05-13T08:20:08.000Z", actor: "workflow", message: "Queued processing workflow" },
       { at: "2026-05-13T08:22:14.000Z", actor: "system", message: "Validated and stored invoice record" }
     ],
     steps: [
-      { name: "ingest", status: "complete" },
-      { name: "classify", status: "complete" },
-      { name: "extract", status: "complete" },
-      { name: "validate", status: "complete" },
-      { name: "persist", status: "complete" }
+      { name: "uploaded", status: "complete" },
+      { name: "queued", status: "complete" },
+      { name: "processing", status: "complete" },
+      { name: "completed", status: "complete" }
     ]
   },
   {
@@ -59,6 +64,11 @@ const initialJobs: OperationsJob[] = [
     confidence: 0.71,
     createdAt: "2026-05-13T08:25:00.000Z",
     updatedAt: "2026-05-13T08:27:33.000Z",
+    uploadedAt: "2026-05-13T08:25:00.000Z",
+    processingMetadata: {
+      textractEnabled: false,
+      phase: "review_required"
+    },
     failureReason: "Gross amount confidence below review threshold",
     extraction: {
       supplierName: "Parts Supplier Europe",
@@ -81,33 +91,36 @@ const initialJobs: OperationsJob[] = [
       { at: "2026-05-13T08:27:33.000Z", actor: "workflow", message: "Routed to human review queue" }
     ],
     steps: [
-      { name: "ingest", status: "complete" },
-      { name: "classify", status: "complete" },
-      { name: "extract", status: "complete" },
-      { name: "validate", status: "blocked" },
+      { name: "uploaded", status: "complete" },
+      { name: "queued", status: "complete" },
+      { name: "processing", status: "blocked" },
       { name: "review", status: "running" },
-      { name: "persist", status: "pending" }
+      { name: "completed", status: "pending" }
     ]
   },
   {
     id: "job_1003",
     documentType: "invoice",
     fileName: "charging-network-invoice.pdf",
-    status: "extracting",
+    status: "processing",
     confidence: null,
     createdAt: "2026-05-13T08:33:00.000Z",
     updatedAt: "2026-05-13T08:34:10.000Z",
+    uploadedAt: "2026-05-13T08:33:00.000Z",
+    processingMetadata: {
+      textractEnabled: false,
+      phase: "processing"
+    },
     findings: [],
     audit: [
       { at: "2026-05-13T08:33:00.000Z", actor: "user", message: "Document uploaded" },
-      { at: "2026-05-13T08:34:10.000Z", actor: "workflow", message: "Textract extraction in progress" }
+      { at: "2026-05-13T08:34:10.000Z", actor: "workflow", message: "Invoice processing in progress" }
     ],
     steps: [
-      { name: "ingest", status: "complete" },
-      { name: "classify", status: "complete" },
-      { name: "extract", status: "running" },
-      { name: "validate", status: "pending" },
-      { name: "persist", status: "pending" }
+      { name: "uploaded", status: "complete" },
+      { name: "queued", status: "complete" },
+      { name: "processing", status: "running" },
+      { name: "completed", status: "pending" }
     ]
   }
 ];
@@ -121,7 +134,7 @@ function App() {
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0];
   const completed = jobs.filter((job) => job.status === "completed").length;
   const review = jobs.filter((job) => job.status === "review_required").length;
-  const processing = jobs.filter((job) => ["queued", "extracting", "validating"].includes(job.status)).length;
+  const processing = jobs.filter((job) => ["queued", "processing"].includes(job.status)).length;
   const averageConfidence = useMemo(() => {
     const scoredJobs = jobs.filter((job) => job.confidence !== null);
     if (scoredJobs.length === 0) {
@@ -153,24 +166,32 @@ function App() {
       await uploadFileToTarget(file, upload.data.uploadTarget.uploadUrl, contentType);
 
       const now = upload.data.job.createdAt;
+      const uploadedAt = new Date().toISOString();
       const newJob: OperationsJob = {
         ...upload.data.job,
+        status: "queued",
+        uploadedAt,
+        updatedAt: uploadedAt,
+        processingMetadata: {
+          textractEnabled: false,
+          phase: "queued"
+        },
         findings: [],
         audit: [
           { at: now, actor: "user", message: "Document selected in local dashboard" },
           { at: now, actor: "workflow", message: "Upload request created for S3 intake" },
           { at: now, actor: "system", message: `Object key reserved: ${upload.data.uploadTarget.objectKey}` },
-          { at: new Date().toISOString(), actor: "system", message: "File uploaded to ingest target" }
+          { at: uploadedAt, actor: "system", message: "File uploaded to ingest target" },
+          { at: uploadedAt, actor: "workflow", message: "S3 event queued asynchronous processing" }
         ],
         steps: [
-          { name: "ingest", status: "complete" },
-          { name: "classify", status: "pending" },
-          { name: "extract", status: "pending" },
-          { name: "validate", status: "pending" },
-          { name: "persist", status: "pending" }
+          { name: "uploaded", status: "complete" },
+          { name: "queued", status: "running" },
+          { name: "processing", status: "pending" },
+          { name: "completed", status: "pending" }
         ],
-        sourceBucket: upload.data.uploadTarget.bucketName,
-        sourceObjectKey: upload.data.uploadTarget.objectKey,
+        bucket: upload.data.uploadTarget.bucketName,
+        objectKey: upload.data.uploadTarget.objectKey,
         uploadTarget: upload.data.uploadTarget,
         requestId: upload.requestId
       };
@@ -296,6 +317,32 @@ function App() {
             ) : (
               <p>Existing mock job. New uploads will reserve a storage key here.</p>
             )}
+          </div>
+
+          <div className="detail-section">
+            <h3>Lifecycle</h3>
+            <dl className="field-grid">
+              <div>
+                <dt>Status</dt>
+                <dd>{statusLabel(selectedJob.status)}</dd>
+              </div>
+              <div>
+                <dt>Uploaded</dt>
+                <dd>{selectedJob.uploadedAt ? new Date(selectedJob.uploadedAt).toLocaleTimeString() : "Pending"}</dd>
+              </div>
+              <div>
+                <dt>Processed</dt>
+                <dd>{selectedJob.processedAt ? new Date(selectedJob.processedAt).toLocaleTimeString() : "Pending"}</dd>
+              </div>
+              <div>
+                <dt>Textract</dt>
+                <dd>{selectedJob.processingMetadata?.textractEnabled ? "Enabled" : "Disabled"}</dd>
+              </div>
+              <div className="wide-field">
+                <dt>Latest processing phase</dt>
+                <dd>{String(selectedJob.processingMetadata?.phase ?? selectedJob.status)}</dd>
+              </div>
+            </dl>
           </div>
 
           <div className="detail-section">

@@ -90,12 +90,17 @@ export const handler = async (event: HttpApiEvent): Promise<HttpApiResponse> => 
           fileName: request.fileName,
           status: "uploaded",
           confidence: null,
-          sourceBucket: documentBucketName,
-          sourceObjectKey: objectKey,
+          bucket: documentBucketName,
+          objectKey,
           contentType: request.contentType,
           sizeBytes: request.sizeBytes,
           createdAt: now.toISOString(),
-          updatedAt: now.toISOString()
+          updatedAt: now.toISOString(),
+          uploadedAt: now.toISOString(),
+          processingMetadata: {
+            uploadMethod: "presigned_put",
+            textractEnabled: false
+          }
         })
       })
     );

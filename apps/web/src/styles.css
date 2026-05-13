@@ -196,6 +196,17 @@ p {
   color: #f2bd67;
 }
 
+.status.queued,
+.status.processing {
+  background: rgba(105, 163, 255, 0.16);
+  color: #9fc2ff;
+}
+
+.status.failed {
+  background: rgba(255, 112, 112, 0.16);
+  color: #ff9a9a;
+}
+
 .detail-panel {
   position: sticky;
   top: 1rem;

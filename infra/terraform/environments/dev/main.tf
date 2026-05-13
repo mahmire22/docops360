@@ -44,3 +44,23 @@ module "api" {
   name_prefix                = var.name_prefix
   upload_url_expires_seconds = var.upload_url_expires_seconds
 }
+
+resource "aws_lambda_permission" "allow_invoice_ingest_bucket" {
+  statement_id  = "AllowExecutionFromInvoiceIngestBucket"
+  action        = "lambda:InvokeFunction"
+  function_name = module.api.processing_worker_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = module.storage.document_bucket_arn
+}
+
+resource "aws_s3_bucket_notification" "invoice_processing" {
+  bucket = module.storage.document_bucket_name
+
+  lambda_function {
+    lambda_function_arn = module.api.processing_worker_arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "uploads/invoice/"
+  }
+
+  depends_on = [aws_lambda_permission.allow_invoice_ingest_bucket]
+}

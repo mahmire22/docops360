@@ -9,6 +9,8 @@ The first Terraform slice creates the foundation for document intake:
 - DynamoDB jobs table
 - status GSI for operations queue filtering
 - Lambda upload handler
+- S3 event notification for uploaded invoices
+- worker Lambda for asynchronous processing metadata updates
 - API Gateway HTTP API
 - CloudWatch log groups with 14-day retention
 
@@ -36,3 +38,5 @@ us-east-1
 ```
 
 Do not commit `terraform.tfvars`, state files, or AWS credentials.
+
+Phase 2 keeps `ENABLE_TEXTRACT=false`. The worker only reads S3 object metadata and updates DynamoDB lifecycle fields.

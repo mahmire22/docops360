@@ -17,3 +17,8 @@ output "upload_route" {
   description = "Route used to create invoice upload URLs."
   value       = "POST ${module.api.http_api_endpoint}/uploads"
 }
+
+output "processing_worker_name" {
+  description = "Name of the invoice processing worker Lambda."
+  value       = module.api.processing_worker_name
+}

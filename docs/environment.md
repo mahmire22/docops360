@@ -40,9 +40,16 @@ The next infrastructure slice is scaffold-only until reviewed:
 - S3 invoice ingest bucket
 - DynamoDB jobs table
 - Lambda upload handler
+- S3 event-driven processing worker
 - API Gateway HTTP API
 - CloudWatch log groups
 - least-privilege IAM role and policy for upload handling
+
+Textract is prepared but disabled:
+
+```text
+ENABLE_TEXTRACT=false
+```
 
 ## Frontend Upload Modes
 

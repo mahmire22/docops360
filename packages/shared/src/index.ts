@@ -5,11 +5,10 @@ export type UploadMethod = "mock" | "presigned_put";
 export type JobStatus =
   | "uploaded"
   | "queued"
-  | "extracting"
-  | "validating"
-  | "review_required"
+  | "processing"
   | "completed"
-  | "failed";
+  | "failed"
+  | "review_required";
 
 export interface DocumentJob {
   id: string;
@@ -19,6 +18,10 @@ export interface DocumentJob {
   confidence: number | null;
   createdAt: string;
   updatedAt: string;
+  uploadedAt?: string;
+  processedAt?: string;
+  processingMetadata?: Record<string, string | number | boolean | null>;
+  errorMessage?: string;
   failureReason?: string;
 }
 
@@ -35,7 +38,7 @@ export interface AuditEvent {
 }
 
 export interface ProcessingStep {
-  name: "ingest" | "classify" | "extract" | "validate" | "review" | "persist";
+  name: "uploaded" | "queued" | "processing" | "completed" | "review";
   status: "pending" | "running" | "complete" | "blocked";
 }
 
@@ -77,6 +80,6 @@ export interface CreateUploadResponse {
 }
 
 export interface JobRecord extends DocumentJob {
-  sourceBucket: string;
-  sourceObjectKey: string;
+  bucket: string;
+  objectKey: string;
 }

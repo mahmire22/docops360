@@ -25,8 +25,13 @@ export const createUpload = (request: CreateUploadRequest): ApiResponse<CreateUp
     confidence: null,
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
-    sourceBucket: documentBucketName,
-    sourceObjectKey: objectKey
+    uploadedAt: now.toISOString(),
+    bucket: documentBucketName,
+    objectKey,
+    processingMetadata: {
+      uploadMethod: "mock",
+      textractEnabled: false
+    }
   };
 
   return {

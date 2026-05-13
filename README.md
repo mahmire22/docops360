@@ -23,6 +23,7 @@ Users upload invoices, warranty claims, service reports, or dealer documents. Th
 - S3 for document storage
 - API Gateway for upload and status APIs
 - Lambda for processing steps
+- S3 object-created events for asynchronous invoice processing
 - SQS for async job decoupling
 - Step Functions for orchestration and retry paths
 - Textract for document extraction
