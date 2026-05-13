@@ -11,6 +11,7 @@
     "@docops360/shared": "0.1.0"
   },
   "devDependencies": {
+    "@types/node": "^25.7.0",
     "typescript": "^5.5.4"
   }
 }

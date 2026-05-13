@@ -1,5 +1,7 @@
 export type DocumentType = "invoice" | "warranty_claim" | "service_report" | "dealer_document";
 
+export type UploadMethod = "mock" | "presigned_post";
+
 export type JobStatus =
   | "uploaded"
   | "queued"
@@ -52,4 +54,29 @@ export interface InvoiceExtraction {
 export interface ApiResponse<T> {
   data: T;
   requestId: string;
+}
+
+export interface CreateUploadRequest {
+  documentType: DocumentType;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+}
+
+export interface UploadTarget {
+  method: UploadMethod;
+  bucketName: string;
+  objectKey: string;
+  uploadUrl: string;
+  expiresAt: string;
+}
+
+export interface CreateUploadResponse {
+  job: DocumentJob;
+  uploadTarget: UploadTarget;
+}
+
+export interface JobRecord extends DocumentJob {
+  sourceBucket: string;
+  sourceObjectKey: string;
 }

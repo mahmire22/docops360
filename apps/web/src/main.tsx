@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AuditEvent, DocumentJob, InvoiceExtraction, ProcessingStep, ValidationFinding } from "@docops360/shared";
+import type { AuditEvent, DocumentJob, InvoiceExtraction, ProcessingStep, UploadTarget, ValidationFinding } from "@docops360/shared";
+import { createUploadRequest } from "./api";
 import "./styles.css";
 
 interface OperationsJob extends DocumentJob {
@@ -8,6 +9,10 @@ interface OperationsJob extends DocumentJob {
   findings: ValidationFinding[];
   audit: AuditEvent[];
   steps: ProcessingStep[];
+  sourceBucket?: string;
+  sourceObjectKey?: string;
+  uploadTarget?: UploadTarget;
+  requestId?: string;
 }
 
 const initialJobs: OperationsJob[] = [
@@ -112,6 +117,7 @@ const statusLabel = (status: DocumentJob["status"]) => status.replace("_", " ");
 function App() {
   const [jobs, setJobs] = useState<OperationsJob[]>(initialJobs);
   const [selectedJobId, setSelectedJobId] = useState(initialJobs[1].id);
+  const [uploadStatus, setUploadStatus] = useState("Ready for invoice intake");
   const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0];
   const completed = jobs.filter((job) => job.status === "completed").length;
   const review = jobs.filter((job) => job.status === "review_required").length;
@@ -126,25 +132,27 @@ function App() {
     return `${Math.round((total / scoredJobs.length) * 100)}%`;
   }, [jobs]);
 
-  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
       return;
     }
 
-    const now = new Date().toISOString();
-    const newJob: OperationsJob = {
-      id: `job_${Math.floor(1000 + Math.random() * 9000)}`,
+    setUploadStatus("Creating upload request...");
+    const upload = await createUploadRequest({
       documentType: "invoice",
       fileName: file.name,
-      status: "queued",
-      confidence: null,
-      createdAt: now,
-      updatedAt: now,
+      contentType: file.type || "application/octet-stream",
+      sizeBytes: file.size
+    });
+    const now = upload.data.job.createdAt;
+    const newJob: OperationsJob = {
+      ...upload.data.job,
       findings: [],
       audit: [
         { at: now, actor: "user", message: "Document selected in local dashboard" },
-        { at: now, actor: "workflow", message: "Mock job queued for AWS ingestion pipeline" }
+        { at: now, actor: "workflow", message: "Upload request created for S3 intake" },
+        { at: now, actor: "system", message: `Object key reserved: ${upload.data.uploadTarget.objectKey}` }
       ],
       steps: [
         { name: "ingest", status: "complete" },
@@ -152,11 +160,16 @@ function App() {
         { name: "extract", status: "pending" },
         { name: "validate", status: "pending" },
         { name: "persist", status: "pending" }
-      ]
+      ],
+      sourceBucket: upload.data.uploadTarget.bucketName,
+      sourceObjectKey: upload.data.uploadTarget.objectKey,
+      uploadTarget: upload.data.uploadTarget,
+      requestId: upload.requestId
     };
 
     setJobs((currentJobs) => [newJob, ...currentJobs]);
     setSelectedJobId(newJob.id);
+    setUploadStatus(`Created ${upload.data.uploadTarget.method} upload target`);
     event.target.value = "";
   };
 
@@ -166,6 +179,7 @@ function App() {
         <div>
           <p className="eyebrow">DocOps360</p>
           <h1>Intelligent document operations</h1>
+          <p className="hero-note">{uploadStatus}</p>
         </div>
         <label className="upload-control">
           Upload document
@@ -244,6 +258,32 @@ function App() {
                 </span>
               ))}
             </div>
+          </div>
+
+          <div className="detail-section">
+            <h3>Storage target</h3>
+            {selectedJob.uploadTarget ? (
+              <dl className="field-grid">
+                <div>
+                  <dt>Bucket</dt>
+                  <dd>{selectedJob.uploadTarget.bucketName}</dd>
+                </div>
+                <div>
+                  <dt>Method</dt>
+                  <dd>{selectedJob.uploadTarget.method}</dd>
+                </div>
+                <div className="wide-field">
+                  <dt>Object key</dt>
+                  <dd>{selectedJob.uploadTarget.objectKey}</dd>
+                </div>
+                <div>
+                  <dt>Request id</dt>
+                  <dd>{selectedJob.requestId}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p>Existing mock job. New uploads will reserve a storage key here.</p>
+            )}
           </div>
 
           <div className="detail-section">

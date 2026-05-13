@@ -44,6 +44,7 @@ infra/
   terraform/        AWS infrastructure
 docs/
   architecture.md   Architecture narrative
+  api-contract.md   API request and response shapes
   next-steps.md     Build guide
 ```
 

@@ -39,3 +39,10 @@ Start with local Terraform state during development. Move to a remote S3 backend
 6. Textract extraction step
 7. Dashboard job detail view
 8. CloudWatch alarms and interview-ready docs
+
+## Current Implementation Status
+
+- Local dashboard uses shared API contracts.
+- Upload action creates a mock job and S3-style object key.
+- API package has handler-level functions for job listing and upload creation.
+- Terraform plan has been reviewed but not applied.
