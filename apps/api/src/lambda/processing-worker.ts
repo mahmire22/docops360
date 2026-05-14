@@ -1,7 +1,6 @@
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { marshall } from "@aws-sdk/util-dynamodb";
-import { prepareTextractExtraction } from "../services/textract";
 
 interface S3EventRecord {
   eventTime: string;
@@ -24,7 +23,7 @@ interface S3Event {
 
 const region = process.env.AWS_REGION ?? "us-east-1";
 const jobsTableName = process.env.JOBS_TABLE_NAME;
-const enableTextract = process.env.ENABLE_TEXTRACT === "true";
+const extractionStrategy = process.env.EXTRACTION_STRATEGY ?? "metadata_only";
 
 const s3 = new S3Client({ region });
 const dynamodb = new DynamoDBClient({ region });
@@ -80,7 +79,6 @@ const processRecord = async (record: S3EventRecord) => {
   const bucket = record.s3.bucket.name;
   const objectKey = decodeS3Key(record.s3.object.key);
   const jobId = parseJobIdFromKey(objectKey);
-  const textractPreparation = prepareTextractExtraction();
 
   console.log(
     JSON.stringify({
@@ -99,8 +97,9 @@ const processRecord = async (record: S3EventRecord) => {
       bucket,
       objectKey,
       phase: "queued",
-      textractEnabled: enableTextract,
-      textractProvider: textractPreparation.provider
+      extractionStrategy,
+      extractionProvider: "metadata_only",
+      intelligenceReadiness: "metadata_only"
     }
   });
 
@@ -109,8 +108,9 @@ const processRecord = async (record: S3EventRecord) => {
       bucket,
       objectKey,
       phase: "processing",
-      textractEnabled: enableTextract,
-      textractMessage: textractPreparation.message
+      extractionStrategy,
+      extractionProvider: "metadata_only",
+      summary: "Document stored successfully. AI extraction is disabled."
     }
   });
 
@@ -132,8 +132,13 @@ const processRecord = async (record: S3EventRecord) => {
       contentLength: objectHead.ContentLength ?? record.s3.object.size ?? null,
       contentType: objectHead.ContentType ?? null,
       eTag: objectHead.ETag ?? record.s3.object.eTag ?? null,
-      textractEnabled: enableTextract,
-      textractSkipped: !enableTextract
+      source: "device_upload",
+      extractionStrategy,
+      extractionProvider: "metadata_only",
+      extractedTextAvailable: false,
+      confidence: null,
+      intelligenceReadiness: "metadata_only",
+      summary: "Document stored successfully. AI extraction is disabled."
     }
   });
 

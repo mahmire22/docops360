@@ -138,10 +138,17 @@ data "aws_iam_policy_document" "jobs_handler" {
   statement {
     sid = "ReadJobRecords"
     actions = [
+      "dynamodb:DeleteItem",
       "dynamodb:GetItem",
       "dynamodb:Scan"
     ]
     resources = [var.jobs_table_arn]
+  }
+
+  statement {
+    sid       = "DeleteInvoiceUploadObjects"
+    actions   = ["s3:DeleteObject"]
+    resources = ["${var.document_bucket_arn}/uploads/invoice/*"]
   }
 }
 
@@ -191,8 +198,8 @@ resource "aws_lambda_function" "processing_worker" {
 
   environment {
     variables = {
-      ENABLE_TEXTRACT = "false"
-      JOBS_TABLE_NAME = var.jobs_table_name
+      EXTRACTION_STRATEGY = "metadata_only"
+      JOBS_TABLE_NAME     = var.jobs_table_name
     }
   }
 
@@ -230,7 +237,7 @@ resource "aws_apigatewayv2_api" "http" {
 
   cors_configuration {
     allow_headers = ["content-type"]
-    allow_methods = ["GET", "OPTIONS", "POST"]
+    allow_methods = ["DELETE", "GET", "OPTIONS", "POST"]
     allow_origins = ["*"]
     max_age       = 300
   }
@@ -287,6 +294,12 @@ resource "aws_apigatewayv2_route" "get_job" {
   target    = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
 }
 
+resource "aws_apigatewayv2_route" "delete_job" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "DELETE /jobs/{jobId}"
+  target    = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
+}
+
 resource "aws_lambda_permission" "allow_http_api" {
   statement_id  = "AllowExecutionFromHttpApi"
   action        = "lambda:InvokeFunction"
@@ -300,5 +313,5 @@ resource "aws_lambda_permission" "allow_http_api_jobs" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.jobs_handler.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/GET/jobs*"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*/jobs*"
 }

@@ -99,7 +99,10 @@ export const handler = async (event: HttpApiEvent): Promise<HttpApiResponse> => 
           uploadedAt: now.toISOString(),
           processingMetadata: {
             uploadMethod: "presigned_put",
-            textractEnabled: false
+            source: "device_upload",
+            extractionStrategy: "metadata_only",
+            extractionProvider: "metadata_only",
+            intelligenceReadiness: "metadata_only"
           }
         })
       })

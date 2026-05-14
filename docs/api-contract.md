@@ -1,8 +1,8 @@
 # DocOps360 API Contract
 
-This contract describes the first product slice: authenticated document intake and job tracking.
+This contract describes the first product slice: document intake, job tracking, and the source data used to derive personal operations signals.
 
-The current implementation uses a local mock client with the same shapes that the AWS API will return later. That lets the dashboard and shared types mature before the cloud resources are applied.
+The frontend supports both real AWS mode and local mock mode with the same response shapes. That lets the portal, Document Library, and shared signal types mature without changing the API contract.
 
 Development AWS region: `us-east-1`.
 
@@ -14,15 +14,15 @@ https://v9lqv2g88e.execute-api.us-east-1.amazonaws.com
 
 ## Create Upload
 
-Creates a document job and returns an upload target.
+Creates a document job and returns a presigned upload target.
 
-Future AWS implementation:
+Current AWS implementation:
 
 - API Gateway receives the request.
 - Lambda validates metadata.
 - DynamoDB stores the job record.
 - S3 presigned upload details are returned to the browser.
-- EventBridge or S3 events trigger the processing workflow.
+- S3 events trigger the lightweight processing worker after upload.
 
 ### Request
 
@@ -63,7 +63,7 @@ Future AWS implementation:
 
 ## List Jobs
 
-Returns jobs for the operations queue.
+Returns jobs used by the portal to derive signals and populate the Document Library.
 
 Current AWS implementation:
 
@@ -96,8 +96,12 @@ GET /jobs
         "uploadedAt": "2026-05-13T08:20:00.000Z",
         "processedAt": "2026-05-13T08:21:00.000Z",
         "processingMetadata": {
-          "textractEnabled": false,
-          "textractSkipped": true
+          "source": "device_upload",
+          "extractionStrategy": "metadata_only",
+          "extractionProvider": "metadata_only",
+          "extractedTextAvailable": false,
+          "intelligenceReadiness": "metadata_only",
+          "summary": "Document stored successfully. AI extraction is disabled."
         }
       }
     ]
@@ -108,16 +112,50 @@ GET /jobs
 
 ## Get Job
 
-Returns job detail, extraction fields, validation findings, workflow steps, and audit events.
+Returns one job record for upload polling, signal derivation, and developer details.
 
 Current AWS implementation:
 
 - API Gateway invokes Lambda.
 - Lambda uses DynamoDB `GetItem` by `jobId`.
-- The dashboard polls this endpoint until `completed`, `failed`, or `review_required`.
+- The portal polls this endpoint until `completed`, `failed`, or `review_required`.
 
 ### Request
 
 ```text
 GET /jobs/{jobId}
+```
+
+## Delete Job
+
+Prepared for Phase 5B/5C. This route is implemented in code and Terraform, but it is not live until Terraform is applied.
+
+The frontend must not send arbitrary S3 bucket or object keys. The backend resolves the job from DynamoDB first, then deletes only the stored `bucket` and `objectKey` for that `jobId`.
+
+Current planned AWS implementation:
+
+- API Gateway invokes the jobs Lambda.
+- Lambda reads the DynamoDB job record by `jobId`.
+- Lambda validates that the stored object key is under `uploads/invoice/`.
+- Lambda deletes the matching S3 object.
+- Lambda deletes the DynamoDB job item.
+- CloudWatch receives structured delete logs.
+
+### Request
+
+```text
+DELETE /jobs/{jobId}
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "jobId": "job_...",
+    "deletedBucket": "docops360-dev-invoice-ingest-...",
+    "deletedObjectKey": "uploads/invoice/job_.../supplier-invoice.pdf"
+  },
+  "requestId": "..."
+}
 ```

@@ -30,3 +30,8 @@ output "jobs_read_routes" {
     "GET ${module.api.http_api_endpoint}/jobs/{jobId}"
   ]
 }
+
+output "jobs_delete_route" {
+  description = "Route prepared for deleting a document job and its associated S3 object."
+  value       = "DELETE ${module.api.http_api_endpoint}/jobs/{jobId}"
+}

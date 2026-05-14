@@ -30,7 +30,10 @@ export const createUpload = (request: CreateUploadRequest): ApiResponse<CreateUp
     objectKey,
     processingMetadata: {
       uploadMethod: "mock",
-      textractEnabled: false
+      source: "device_upload",
+      extractionStrategy: "metadata_only",
+      extractionProvider: "metadata_only",
+      intelligenceReadiness: "metadata_only"
     }
   };
 

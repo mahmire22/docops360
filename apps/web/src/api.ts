@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   CreateUploadRequest,
   CreateUploadResponse,
+  DeleteJobResponse,
   GetJobResponse,
   JobRecord,
   ListJobsResponse
@@ -125,6 +126,38 @@ export const getJobRequest = async (jobId: string): Promise<ApiResponse<GetJobRe
   }
 
   return response.json() as Promise<ApiResponse<GetJobResponse>>;
+};
+
+export const deleteJobRequest = async (jobId: string): Promise<ApiResponse<DeleteJobResponse>> => {
+  if (!isRealMode()) {
+    return {
+      data: {
+        jobId,
+        deletedBucket: documentBucketName,
+        deletedObjectKey: ""
+      },
+      requestId: crypto.randomUUID()
+    };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/jobs/${encodeURIComponent(jobId)}`, {
+      method: "DELETE"
+    });
+  } catch {
+    throw new Error("Delete API is not deployed yet. Apply Terraform after review.");
+  }
+
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 405) {
+      throw new Error("Delete API is not deployed yet. Apply Terraform after review.");
+    }
+
+    throw new Error(`Delete job failed with ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json() as Promise<ApiResponse<DeleteJobResponse>>;
 };
 
 export const isTerminalStatus = (status: JobRecord["status"]) =>

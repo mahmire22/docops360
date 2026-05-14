@@ -35,20 +35,23 @@ Do not commit:
 
 ## Current Cloud Scope
 
-The next infrastructure slice is scaffold-only until reviewed:
+The current development cloud scope supports document uploads and job reads:
 
-- S3 invoice ingest bucket
+- S3 document ingest bucket for the first upload module
 - DynamoDB jobs table
 - Lambda upload handler
 - S3 event-driven processing worker
+- Lambda job read handlers
 - API Gateway HTTP API
 - CloudWatch log groups
-- least-privilege IAM role and policy for upload handling
+- least-privilege IAM roles and policies
 
-Textract is prepared but disabled:
+The MVP extraction strategy is metadata-only and cost-safe:
 
 ```text
-ENABLE_TEXTRACT=false
+EXTRACTION_STRATEGY=metadata_only
+ENABLE_BEDROCK=false
+AI_MANUAL_TRIGGER_ONLY=true
 ```
 
 ## Frontend Upload Modes

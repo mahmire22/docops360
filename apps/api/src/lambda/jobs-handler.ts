@@ -1,6 +1,7 @@
-import { DynamoDBClient, GetItemCommand, ScanCommand } from "@aws-sdk/client-dynamodb";
+import { DeleteItemCommand, DynamoDBClient, GetItemCommand, ScanCommand } from "@aws-sdk/client-dynamodb";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
-import type { ApiResponse, GetJobResponse, JobRecord, ListJobsResponse } from "@docops360/shared";
+import type { ApiResponse, DeleteJobResponse, GetJobResponse, JobRecord, ListJobsResponse } from "@docops360/shared";
 
 interface HttpApiEvent {
   routeKey?: string;
@@ -25,6 +26,7 @@ interface HttpApiResponse {
 const region = process.env.AWS_REGION ?? "us-east-1";
 const jobsTableName = process.env.JOBS_TABLE_NAME;
 const dynamodb = new DynamoDBClient({ region });
+const s3 = new S3Client({ region });
 
 const jsonHeaders = {
   "content-type": "application/json"
@@ -92,6 +94,42 @@ const getJob = async (jobId: string): Promise<JobRecord | undefined> => {
   return result.Item ? toJobRecord(unmarshall(result.Item)) : undefined;
 };
 
+const deleteJob = async (job: JobRecord): Promise<DeleteJobResponse> => {
+  if (!jobsTableName) {
+    throw new Error("JOBS_TABLE_NAME is required.");
+  }
+
+  if (!job.bucket || !job.objectKey) {
+    throw new Error("Job record is missing bucket or object key.");
+  }
+
+  if (!job.objectKey.startsWith("uploads/invoice/")) {
+    throw new Error("Delete is only allowed for uploaded invoice objects.");
+  }
+
+  await s3.send(
+    new DeleteObjectCommand({
+      Bucket: job.bucket,
+      Key: job.objectKey
+    })
+  );
+
+  await dynamodb.send(
+    new DeleteItemCommand({
+      TableName: jobsTableName,
+      Key: {
+        jobId: { S: job.id }
+      }
+    })
+  );
+
+  return {
+    jobId: job.id,
+    deletedBucket: job.bucket,
+    deletedObjectKey: job.objectKey
+  };
+};
+
 export const handler = async (event: HttpApiEvent): Promise<HttpApiResponse> => {
   const requestId = requestIdFor(event);
 
@@ -112,6 +150,25 @@ export const handler = async (event: HttpApiEvent): Promise<HttpApiResponse> => 
       const job = await getJob(jobId);
       if (!job) {
         return response(404, { message: "Job not found.", requestId });
+      }
+
+      if (event.requestContext?.http?.method === "DELETE") {
+        console.log(
+          JSON.stringify({
+            level: "info",
+            message: "Deleting job archive record and S3 object",
+            requestId,
+            jobId,
+            objectKey: job.objectKey
+          })
+        );
+
+        const body: ApiResponse<DeleteJobResponse> = {
+          data: await deleteJob(job),
+          requestId
+        };
+
+        return response(200, body);
       }
 
       const body: ApiResponse<GetJobResponse> = {

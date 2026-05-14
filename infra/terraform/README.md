@@ -40,4 +40,4 @@ us-east-1
 
 Do not commit `terraform.tfvars`, state files, or AWS credentials.
 
-Phase 2 keeps `ENABLE_TEXTRACT=false`. The worker only reads S3 object metadata and updates DynamoDB lifecycle fields.
+The worker uses `EXTRACTION_STRATEGY=metadata_only`. It only reads S3 object metadata and updates DynamoDB lifecycle fields.
