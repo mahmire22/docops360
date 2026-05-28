@@ -42,6 +42,18 @@ Future `bedrock_claude` can support:
 
 The AI layer should read from DocOps360 evidence, metadata, goals, projects, decisions, and audit history rather than acting as a generic chatbot. If AI review fails, it should fall back safely to `metadata_only`.
 
+## Future MCP Tool Surface
+
+MCP is not implemented in the MVP. The future assistant can expose narrow internal tools when the product is ready:
+
+- `search_archive`
+- `get_document_metadata`
+- `list_goals`
+- `get_project_context`
+- `summarize_recent_documents`
+
+Those tools should stay read-focused first. Any future write/action tools should remain explicit, auditable, and human-reviewed.
+
 ## Product Data Kept By DocOps360
 
 DocOps360 is designed to store and connect:

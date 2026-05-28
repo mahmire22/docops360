@@ -1332,14 +1332,27 @@ p {
   padding: 1rem 1.2rem 0;
 }
 
-.archive-groups span {
+.archive-groups button {
+  min-height: 42px;
   padding: 0.45rem 0.65rem;
   border: 1px solid rgba(122, 215, 182, 0.16);
-  border-radius: 999px;
+  border-radius: 8px;
   background: rgba(122, 215, 182, 0.06);
   color: #d8e2de;
   font-size: 0.8rem;
   font-weight: 850;
+}
+
+.archive-groups button.is-active {
+  border-color: rgba(122, 215, 182, 0.42);
+  background: rgba(122, 215, 182, 0.14);
+  color: #f6f7f2;
+}
+
+.archive-groups button small {
+  margin-left: 0.45rem;
+  color: #8ca09a;
+  font-weight: 900;
 }
 
 .workspace-view {
@@ -1357,6 +1370,25 @@ p {
 .goal-card-grid {
   display: grid;
   gap: 0.8rem;
+}
+
+.goal-status-guide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.goal-status-guide span {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #9fafaa;
+  font-size: 0.78rem;
+}
+
+.goal-status-guide strong {
+  color: #e4eee9;
 }
 
 .signal-card {

@@ -51,6 +51,8 @@ The MVP extraction strategy is `metadata_only`. Uploaded documents are stored as
 
 Future `bedrock_claude` can enrich signals with summaries, risks, priorities, due-date reasoning, recommended actions, and evidence citations. Bedrock/Claude is disabled for now.
 
+Future MCP tools can expose narrow internal capabilities such as archive search, document metadata lookup, goal listing, project context, and recent document summaries. No MCP server is enabled in the MVP.
+
 ## Technical Demo Story
 
 DocOps360 currently demonstrates:

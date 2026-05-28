@@ -92,6 +92,8 @@ export type ExtractionStrategy = "metadata_only" | "bedrock_claude";
 
 export type ExtractionProvider = ExtractionStrategy;
 
+export type AIStatus = "disabled" | "completed" | "fallback" | "failed";
+
 export type IntelligenceCardReadiness = "metadata_only" | "ready_for_ai_review" | "needs_manual_review";
 
 export interface EvidenceCitation {
@@ -334,6 +336,11 @@ export interface AIReviewRequest {
 export interface AIReviewResult {
   requestId: string;
   provider: IntelligenceProvider;
+  aiStatus?: AIStatus;
+  aiSummary?: string;
+  aiConfidence?: RecommendationConfidence;
+  evidence?: EvidenceCitation[];
+  recommendedAction?: string;
   summary: string;
   risks: string[];
   recommendations: RecommendationRecord[];

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json && esbuild src/lambda/upload-handler.ts src/lambda/processing-worker.ts src/lambda/jobs-handler.ts --bundle --platform=node --target=node20 --format=cjs --outdir=dist/lambda",
+    "build": "tsc -p tsconfig.json && esbuild src/lambda/upload-handler.ts src/lambda/processing-worker.ts src/lambda/jobs-handler.ts --bundle --platform=node --target=node22 --format=cjs --outdir=dist/lambda",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

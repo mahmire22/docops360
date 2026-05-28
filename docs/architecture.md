@@ -101,7 +101,7 @@ The current implementation demonstrates:
 - React/Vite frontend
 - Typed shared models
 - API Gateway HTTP API
-- Lambda upload/read handlers
+- Lambda upload/read/delete handlers prepared for the Node.js 22 runtime
 - S3 presigned uploads
 - S3 event worker
 - DynamoDB lifecycle state
@@ -109,6 +109,18 @@ The current implementation demonstrates:
 - Safe archive delete API prepared behind Terraform
 - Terraform IaC
 - Future AI enrichment path through Bedrock/Claude and connector-derived signals
+
+## Future MCP Readiness
+
+DocOps360 is not running an MCP server in the MVP. The internal product boundaries are being kept MCP-ready so future assistant tools can expose narrow, auditable operations such as:
+
+- `search_archive`
+- `get_document_metadata`
+- `list_goals`
+- `get_project_context`
+- `summarize_recent_documents`
+
+These tools should read DocOps360 evidence and context first, then optionally call Bedrock/Claude behind feature flags when paid AI review is explicitly enabled.
 
 ## Security Story
 

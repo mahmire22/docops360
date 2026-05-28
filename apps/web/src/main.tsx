@@ -46,7 +46,7 @@ interface OperationsJob extends JobRecord {
 }
 
 type AppView = "assistant" | "documents" | "activity" | "goals" | "sources" | "developer" | "system" | "project";
-type DateRangeFilter = "today" | "week" | "month" | "year" | "all";
+type DateRangeFilter = "today" | "week" | "month" | "older" | "all";
 type StatusFilter = "all" | DocumentJob["status"];
 type GoalStatusFilter = "active" | "future" | "archived" | "all";
 type ArchiveSourceFilter =
@@ -690,7 +690,7 @@ const isInDateRange = (value: string | undefined, range: DateRangeFilter, now: D
     return date >= new Date(now.getFullYear(), now.getMonth(), 1);
   }
 
-  return date >= new Date(now.getFullYear(), 0, 1);
+  return date < new Date(now.getFullYear(), now.getMonth(), 1);
 };
 
 const toOperationsJob = (job: JobRecord, previous?: Partial<OperationsJob>): OperationsJob => ({
@@ -860,6 +860,13 @@ function App() {
         return matchesSearch && matchesStatus && matchesDate && matchesSource;
       });
   }, [currentTime, documentDateRange, documentSearchTerm, documentSourceFilter, documentStatusFilter, jobs]);
+  const archiveGroups: Array<{ value: DateRangeFilter; label: string; helper: string }> = [
+    { value: "today", label: "Today", helper: `${jobs.filter((job) => isInDateRange(job.uploadedAt ?? job.createdAt, "today", currentTime)).length}` },
+    { value: "week", label: "This week", helper: `${jobs.filter((job) => isInDateRange(job.uploadedAt ?? job.createdAt, "week", currentTime)).length}` },
+    { value: "month", label: "This month", helper: `${jobs.filter((job) => isInDateRange(job.uploadedAt ?? job.createdAt, "month", currentTime)).length}` },
+    { value: "older", label: "Older", helper: `${jobs.filter((job) => isInDateRange(job.uploadedAt ?? job.createdAt, "older", currentTime)).length}` },
+    { value: "all", label: "All", helper: `${jobs.length}` }
+  ];
   const filteredGoals = useMemo(
     () =>
       goals.filter((goal) => {
@@ -1527,7 +1534,7 @@ function App() {
 	            </button>
 	            <div>
 	              <h2 id="goal-modal-title">Create goal</h2>
-	              <p>Goals give the assistant context for recommendations, search, and decisions.</p>
+	              <p>Goals guide future document reviews, search, and recommendations.</p>
 	            </div>
 	            <label>
 	              Goal name
@@ -1748,24 +1755,25 @@ function App() {
             <div className="library-header">
               <div>
                 <p className="eyebrow">Archive</p>
-                <h1 id="library-title">Documents</h1>
+                <h1 id="library-title">Document vault</h1>
                 <p className="hero-note">
-                  Evidence archive for local documents, cloud files, mobile uploads, shared folders, and future file server or enterprise sources.
+                  Stored evidence for device uploads and future connected sources. Technical storage details stay collapsed by default.
                 </p>
               </div>
             </div>
 
             <section className="panel library-panel">
               <div className="archive-groups" aria-label="Archive groups">
-                {[
-                  "Today",
-                  "This week",
-                  "This month",
-                  "This year",
-                  "All documents",
-                  "By source"
-                ].map((group) => (
-                  <span key={group}>{group}</span>
+                {archiveGroups.map((group) => (
+                  <button
+                    className={documentDateRange === group.value ? "is-active" : ""}
+                    key={group.value}
+                    type="button"
+                    onClick={() => setDocumentDateRange(group.value)}
+                  >
+                    <span>{group.label}</span>
+                    <small>{group.helper}</small>
+                  </button>
                 ))}
               </div>
 	              <div className="library-controls" aria-label="Document filters">
@@ -1809,8 +1817,8 @@ function App() {
                     <option value="today">Today</option>
                     <option value="week">This week</option>
                     <option value="month">This month</option>
-                    <option value="year">This year</option>
-                    <option value="all">All</option>
+                    <option value="older">Older</option>
+                    <option value="all">All documents</option>
                   </select>
 	                </label>
 	              </div>
@@ -1957,8 +1965,13 @@ function App() {
               </button>
 	            </div>
 	            <p className="hero-note">
-	              Goals give the assistant context for recommendations, search, and decisions.
+	              Goals guide future document reviews, search, and recommendations.
 	            </p>
+	            <div className="goal-status-guide" aria-label="Goal status meaning">
+	              <span><strong>Active</strong> used for intelligence</span>
+	              <span><strong>Future</strong> saved but not active yet</span>
+	              <span><strong>Archived</strong> retained but ignored by default</span>
+	            </div>
 	            <div className="goal-filter-tabs" aria-label="Goal filters">
 	              {[
 	                ["active", "Active"],
@@ -2121,27 +2134,27 @@ function App() {
                   </div>
                   <div>
                     <dt>API status</dt>
-                    <dd>{jobSource.includes("Live") ? "Connected" : "Fallback"}</dd>
+                    <dd>{jobSource.includes("Live") ? "API connected" : "Fallback"}</dd>
                   </div>
                   <div>
-                    <dt>Processing worker</dt>
-                    <dd>Enabled</dd>
+                    <dt>Upload pipeline</dt>
+                    <dd>Active</dd>
                   </div>
                   <div>
-                    <dt>Extraction</dt>
-                    <dd>{EXTRACTION_STRATEGY}</dd>
+                    <dt>Archive delete</dt>
+                    <dd>Active</dd>
                   </div>
 	                  <div>
-	                    <dt>Assistant</dt>
-	                    <dd>UI-only / AI disabled</dd>
+	                    <dt>Extraction strategy</dt>
+	                    <dd>{EXTRACTION_STRATEGY}</dd>
 	                  </div>
 	                  <div>
-	                    <dt>Deletion API</dt>
-	                    <dd>Prepared / pending Terraform apply</dd>
+	                    <dt>Bedrock</dt>
+	                    <dd>Disabled</dd>
 	                  </div>
                   <div>
-                    <dt>Workspace state</dt>
-                    <dd>Local UI state</dd>
+                    <dt>MCP</dt>
+                    <dd>Future-ready</dd>
                   </div>
                   <div>
                     <dt>Textract</dt>
@@ -2159,7 +2172,7 @@ function App() {
                 <dl>
                   <div>
                     <dt>Upload pipeline</dt>
-                    <dd>Presigned S3 upload</dd>
+                    <dd>Active presigned S3 upload</dd>
                   </div>
                   <div>
                     <dt>Archive documents</dt>
@@ -2178,12 +2191,12 @@ function App() {
                     <dd>{goals.length}</dd>
                   </div>
                   <div>
-                    <dt>Review items</dt>
-                    <dd>{reviewSuggestedCount} suggested</dd>
-                  </div>
-                  <div>
                     <dt>Projects</dt>
                     <dd>{projects.length}</dd>
+                  </div>
+                  <div>
+                    <dt>Review items</dt>
+                    <dd>{reviewSuggestedCount} suggested</dd>
                   </div>
                   <div>
                     <dt>Sessions</dt>
@@ -2311,6 +2324,33 @@ function App() {
             </div>
             <div className="developer-section-grid">
               <article className="system-card">
+                <h2>Architecture flow</h2>
+                <ul className="system-placeholder-list">
+                  {[
+                    "Browser app -> API Gateway -> Lambda",
+                    "Lambda -> S3/DynamoDB",
+                    "S3 event -> Worker Lambda -> DynamoDB",
+                    "CloudWatch/IAM provide logs and access control"
+                  ].map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </article>
+              <article className="system-card">
+                <h2>Current MVP</h2>
+                <ul className="system-placeholder-list">
+                  {[
+                    "metadata_only extraction",
+                    "No Textract",
+                    "No Bedrock enabled",
+                    "Upload/read/delete APIs active",
+                    "Goals and projects stay local for now"
+                  ].map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </article>
+              <article className="system-card">
                 <h2>Current deployed resources</h2>
                 <ul className="system-placeholder-list">
                   {[
@@ -2362,17 +2402,31 @@ function App() {
                 </ul>
               </article>
 	              <article className="system-card">
-	                <h2>Future AI path</h2>
+	                <h2>Future intelligence</h2>
                 <ul className="system-placeholder-list">
                   {[
                     "ExtractionStrategy: metadata_only active",
-                    "Bedrock/Claude future path",
+                    "Bedrock Claude behind feature flag",
                     "Textract removed from MVP",
-                    "Action-review layer future only",
+                    "MCP-ready internal tools later",
                     "Audit trail"
                   ].map((item) => (
                     <li key={item}>{item}</li>
                   ))}
+	                </ul>
+	              </article>
+	              <article className="system-card">
+	                <h2>Future MCP tools</h2>
+	                <ul className="system-placeholder-list">
+	                  {[
+	                    "search_archive",
+	                    "get_document_metadata",
+	                    "list_goals",
+	                    "get_project_context",
+	                    "summarize_recent_documents"
+	                  ].map((item) => (
+	                    <li key={item}>{item}</li>
+	                  ))}
 	                </ul>
 	              </article>
 	              <article className="system-card">
@@ -2410,7 +2464,7 @@ function App() {
 	                    "No live Bedrock/Claude calls",
 	                    "No auth or external connectors yet",
 	                    "Manual review before sensitive actions",
-	                    "Terraform apply required before delete API is live"
+	                    "Terraform apply required before Lambda runtime changes go live"
 	                  ].map((item) => (
 	                    <li key={item}>{item}</li>
 	                  ))}

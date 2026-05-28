@@ -167,7 +167,7 @@ resource "aws_lambda_function" "upload_handler" {
   filename         = data.archive_file.upload_handler.output_path
   handler          = "lambda/upload-handler.handler"
   role             = aws_iam_role.upload_handler.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   source_code_hash = data.archive_file.upload_handler.output_base64sha256
   timeout          = 10
   memory_size      = 256
@@ -191,7 +191,7 @@ resource "aws_lambda_function" "processing_worker" {
   filename         = data.archive_file.upload_handler.output_path
   handler          = "lambda/processing-worker.handler"
   role             = aws_iam_role.processing_worker.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   source_code_hash = data.archive_file.upload_handler.output_base64sha256
   timeout          = 15
   memory_size      = 256
@@ -214,7 +214,7 @@ resource "aws_lambda_function" "jobs_handler" {
   filename         = data.archive_file.upload_handler.output_path
   handler          = "lambda/jobs-handler.handler"
   role             = aws_iam_role.jobs_handler.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   source_code_hash = data.archive_file.upload_handler.output_base64sha256
   timeout          = 10
   memory_size      = 256
