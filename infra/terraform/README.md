@@ -41,3 +41,8 @@ us-east-1
 Do not commit `terraform.tfvars`, state files, or AWS credentials.
 
 The worker uses `EXTRACTION_STRATEGY=metadata_only`. It only reads S3 object metadata and updates DynamoDB lifecycle fields.
+
+
+## Remote State Migration
+
+Local state is still the source of truth until migration is deliberately completed. See [Terraform Remote State Migration Runbook](../../docs/terraform-state-migration.md) before applying the bootstrap backend or running `terraform init -migrate-state`.

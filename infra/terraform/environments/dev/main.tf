@@ -1,6 +1,14 @@
 terraform {
   required_version = ">= 1.6.0"
 
+  backend "s3" {
+    bucket       = "docops360-tfstate-009160052610-us-east-1"
+    key          = "docops360/dev/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
