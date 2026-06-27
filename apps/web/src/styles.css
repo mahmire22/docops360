@@ -2382,3 +2382,30 @@ select option {
     width: 100%;
   }
 }
+
+.inline-notice {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: rgba(241, 247, 245, 0.78);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+}
+
+.inline-notice small {
+  color: rgba(241, 247, 245, 0.62);
+}
+
+.inline-notice.success {
+  border-color: rgba(81, 214, 143, 0.35);
+  color: #baf7d3;
+}
+
+.inline-notice.error {
+  border-color: rgba(255, 137, 137, 0.35);
+  color: #ffd2d2;
+}

@@ -47,6 +47,8 @@ module "api" {
   document_bucket_arn        = module.storage.document_bucket_arn
   document_bucket_name       = module.storage.document_bucket_name
   environment                = var.environment
+  goals_table_arn            = module.storage.goals_table_arn
+  goals_table_name           = module.storage.goals_table_name
   jobs_table_arn             = module.storage.jobs_table_arn
   jobs_table_name            = module.storage.jobs_table_name
   name_prefix                = var.name_prefix

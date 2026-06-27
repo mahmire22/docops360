@@ -2,12 +2,20 @@ locals {
   upload_function_name = "${var.name_prefix}-${var.environment}-create-upload"
   worker_function_name = "${var.name_prefix}-${var.environment}-process-invoice"
   jobs_function_name   = "${var.name_prefix}-${var.environment}-read-jobs"
+  goals_function_name  = "${var.name_prefix}-${var.environment}-goals"
 }
 
 data "archive_file" "upload_handler" {
   type        = "zip"
   source_dir  = "${path.root}/../../../../apps/api/dist"
   output_path = "${path.root}/.terraform/build/upload-handler.zip"
+  excludes    = ["lambda/goals-handler.js"]
+}
+
+data "archive_file" "goals_handler" {
+  type        = "zip"
+  source_file = "${path.root}/../../../../apps/api/dist/lambda/goals-handler.js"
+  output_path = "${path.root}/.terraform/build/goals-handler.zip"
 }
 
 resource "aws_cloudwatch_log_group" "upload_handler" {
@@ -22,6 +30,11 @@ resource "aws_cloudwatch_log_group" "processing_worker" {
 
 resource "aws_cloudwatch_log_group" "jobs_handler" {
   name              = "/aws/lambda/${local.jobs_function_name}"
+  retention_in_days = 14
+}
+
+resource "aws_cloudwatch_log_group" "goals_handler" {
+  name              = "/aws/lambda/${local.goals_function_name}"
   retention_in_days = 14
 }
 
@@ -53,6 +66,11 @@ resource "aws_iam_role" "processing_worker" {
 
 resource "aws_iam_role" "jobs_handler" {
   name               = "${local.jobs_function_name}-role"
+  assume_role_policy = data.aws_iam_policy_document.upload_assume_role.json
+}
+
+resource "aws_iam_role" "goals_handler" {
+  name               = "${local.goals_function_name}-role"
   assume_role_policy = data.aws_iam_policy_document.upload_assume_role.json
 }
 
@@ -162,6 +180,38 @@ resource "aws_iam_role_policy_attachment" "jobs_handler" {
   policy_arn = aws_iam_policy.jobs_handler.arn
 }
 
+data "aws_iam_policy_document" "goals_handler" {
+  statement {
+    sid = "WriteOwnLogs"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = ["${aws_cloudwatch_log_group.goals_handler.arn}:*"]
+  }
+
+  statement {
+    sid = "ManageGoalRecords"
+    actions = [
+      "dynamodb:DeleteItem",
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:Scan"
+    ]
+    resources = [var.goals_table_arn]
+  }
+}
+
+resource "aws_iam_policy" "goals_handler" {
+  name   = "${local.goals_function_name}-policy"
+  policy = data.aws_iam_policy_document.goals_handler.json
+}
+
+resource "aws_iam_role_policy_attachment" "goals_handler" {
+  role       = aws_iam_role.goals_handler.name
+  policy_arn = aws_iam_policy.goals_handler.arn
+}
+
 resource "aws_lambda_function" "upload_handler" {
   function_name    = local.upload_function_name
   filename         = data.archive_file.upload_handler.output_path
@@ -231,13 +281,35 @@ resource "aws_lambda_function" "jobs_handler" {
   ]
 }
 
+resource "aws_lambda_function" "goals_handler" {
+  function_name    = local.goals_function_name
+  filename         = data.archive_file.goals_handler.output_path
+  handler          = "goals-handler.handler"
+  role             = aws_iam_role.goals_handler.arn
+  runtime          = "nodejs22.x"
+  source_code_hash = data.archive_file.goals_handler.output_base64sha256
+  timeout          = 10
+  memory_size      = 256
+
+  environment {
+    variables = {
+      GOALS_TABLE_NAME = var.goals_table_name
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.goals_handler,
+    aws_iam_role_policy_attachment.goals_handler
+  ]
+}
+
 resource "aws_apigatewayv2_api" "http" {
   name          = "${var.name_prefix}-${var.environment}-http-api"
   protocol_type = "HTTP"
 
   cors_configuration {
     allow_headers = ["content-type"]
-    allow_methods = ["DELETE", "GET", "OPTIONS", "POST"]
+    allow_methods = ["DELETE", "GET", "OPTIONS", "PATCH", "POST"]
     allow_origins = ["*"]
     max_age       = 300
   }
@@ -276,6 +348,13 @@ resource "aws_apigatewayv2_integration" "jobs_handler" {
   payload_format_version = "2.0"
 }
 
+resource "aws_apigatewayv2_integration" "goals_handler" {
+  api_id                 = aws_apigatewayv2_api.http.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.goals_handler.invoke_arn
+  payload_format_version = "2.0"
+}
+
 resource "aws_apigatewayv2_route" "create_upload" {
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "POST /uploads"
@@ -300,6 +379,30 @@ resource "aws_apigatewayv2_route" "delete_job" {
   target    = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
 }
 
+resource "aws_apigatewayv2_route" "list_goals" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "GET /goals"
+  target    = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
+}
+
+resource "aws_apigatewayv2_route" "create_goal" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "POST /goals"
+  target    = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
+}
+
+resource "aws_apigatewayv2_route" "update_goal" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "PATCH /goals/{goalId}"
+  target    = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
+}
+
+resource "aws_apigatewayv2_route" "delete_goal" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "DELETE /goals/{goalId}"
+  target    = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
+}
+
 resource "aws_lambda_permission" "allow_http_api" {
   statement_id  = "AllowExecutionFromHttpApi"
   action        = "lambda:InvokeFunction"
@@ -314,4 +417,12 @@ resource "aws_lambda_permission" "allow_http_api_jobs" {
   function_name = aws_lambda_function.jobs_handler.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*/jobs*"
+}
+
+resource "aws_lambda_permission" "allow_http_api_goals" {
+  statement_id  = "AllowGoalsFromHttpApi"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.goals_handler.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*/goals*"
 }

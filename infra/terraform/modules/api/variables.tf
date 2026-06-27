@@ -13,6 +13,16 @@ variable "environment" {
   type        = string
 }
 
+variable "goals_table_arn" {
+  description = "ARN of the DynamoDB goals table."
+  type        = string
+}
+
+variable "goals_table_name" {
+  description = "Name of the DynamoDB goals table."
+  type        = string
+}
+
 variable "jobs_table_arn" {
   description = "ARN of the DynamoDB jobs table."
   type        = string

@@ -24,13 +24,17 @@ import type {
   ValidationFinding
 } from "@docops360/shared";
 import {
+  createGoalRequest,
   createUploadRequest,
+  deleteGoalRequest,
   deleteJobRequest,
   getJobRequest,
   getUploadMode,
   isRealMode,
   isTerminalStatus,
+  listGoalsRequest,
   listJobsRequest,
+  updateGoalRequest,
   uploadFileToTarget
 } from "./api";
 import "./styles.css";
@@ -794,6 +798,10 @@ function App() {
   });
   const [isGoalFormOpen, setIsGoalFormOpen] = useState(false);
   const [goalStatusFilter, setGoalStatusFilter] = useState<GoalStatusFilter>("active");
+  const [goalsSource, setGoalsSource] = useState(isRealMode() ? "Live goals API" : "Local goals");
+  const [goalsNotice, setGoalsNotice] = useState<{ message: string; tone: "success" | "error" | "neutral" }>();
+  const [isLoadingGoals, setIsLoadingGoals] = useState(false);
+  const [savingGoalId, setSavingGoalId] = useState<string | undefined>();
   const [projects, setProjects] = useState<LocalProject[]>([]);
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
@@ -867,6 +875,7 @@ function App() {
     { value: "older", label: "Older", helper: `${jobs.filter((job) => isInDateRange(job.uploadedAt ?? job.createdAt, "older", currentTime)).length}` },
     { value: "all", label: "All", helper: `${jobs.length}` }
   ];
+  const activeGoalCount = goals.filter((goal) => goal.status === "active").length;
   const filteredGoals = useMemo(
     () =>
       goals.filter((goal) => {
@@ -1128,7 +1137,7 @@ function App() {
     { id: "documents", label: "Archive", helper: `${jobs.length}` }
   ];
   const contextNavItems: Array<{ id: AppView; label: string; helper?: string }> = [
-    { id: "goals", label: "Goals", helper: `${goals.length} active` },
+    { id: "goals", label: "Goals", helper: `${activeGoalCount} active` },
     { id: "sources", label: "Sources", helper: "Connectors" }
   ];
   const adminNavItems: Array<{ id: AppView; label: string; helper?: string }> = [
@@ -1158,6 +1167,52 @@ function App() {
     </section>
   );
 
+  const mergeGoalHistory = (apiGoals: UserGoal[]) => {
+    setGoalHistory((currentHistory) => {
+      const nextHistory: Record<string, GoalHistoryItem[]> = { ...currentHistory };
+      apiGoals.forEach((goal) => {
+        if (!nextHistory[goal.goalId]) {
+          nextHistory[goal.goalId] = [goalHistoryItem("created", "Goal loaded from AWS.")];
+        }
+      });
+      return nextHistory;
+    });
+  };
+
+  const refreshGoals = async () => {
+    if (!isRealMode()) {
+      setGoalsSource("Local goals");
+      return;
+    }
+
+    setIsLoadingGoals(true);
+    try {
+      const response = await listGoalsRequest();
+      setGoals(response.data.goals);
+      mergeGoalHistory(response.data.goals);
+      setGoalsSource("Live goals API");
+      setGoalsNotice(undefined);
+    } catch (error) {
+      setGoalsSource("Local fallback");
+      setGoalsNotice({
+        message: error instanceof Error ? error.message : "Goals API is unavailable. Showing local fallback.",
+        tone: "error"
+      });
+    } finally {
+      setIsLoadingGoals(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshGoals();
+  }, []);
+
+  useEffect(() => {
+    if (view === "goals") {
+      void refreshGoals();
+    }
+  }, [view]);
+
   const handleNewChat = () => {
     const createdAt = nowIso();
     const session: ChatSession = {
@@ -1173,7 +1228,7 @@ function App() {
     window.setTimeout(() => assistantInputRef.current?.focus(), 50);
   };
 
-  const handleCreateGoal = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleCreateGoal = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const title = newGoal.title.trim();
@@ -1181,30 +1236,41 @@ function App() {
       return;
     }
 
-    const goalId = `goal_manual_${Date.now()}`;
-    setGoals((currentGoals) => [
-      ...currentGoals,
-      {
-        goalId,
+    const description = newGoal.description.trim() || "Goal context for future assistant recommendations.";
+    setSavingGoalId("new");
+    setGoalsNotice(undefined);
+
+    try {
+      const response = await createGoalRequest({
         title,
         category: newGoal.category,
         status: newGoal.status,
         priority: newGoal.priority,
-        description: newGoal.description.trim() || "Local goal context for future assistant recommendations."
-      }
-    ]);
-    setGoalHistory((currentHistory) => ({
-      ...currentHistory,
-      [goalId]: [goalHistoryItem("created", "Goal created locally.")]
-    }));
-    setNewGoal({
-      title: "",
-      category: "others",
-      priority: "normal",
-      status: "active",
-      description: ""
-    });
-    setIsGoalFormOpen(false);
+        description
+      });
+      const goal = response.data.goal;
+      setGoals((currentGoals) => [goal, ...currentGoals.filter((item) => item.goalId !== goal.goalId)]);
+      setGoalHistory((currentHistory) => ({
+        ...currentHistory,
+        [goal.goalId]: [goalHistoryItem("created", isRealMode() ? "Goal saved to AWS." : "Goal created locally.")]
+      }));
+      setNewGoal({
+        title: "",
+        category: "others",
+        priority: "normal",
+        status: "active",
+        description: ""
+      });
+      setIsGoalFormOpen(false);
+      setGoalsNotice({ message: "Goal saved.", tone: "success" });
+    } catch (error) {
+      setGoalsNotice({
+        message: error instanceof Error ? error.message : "Goal could not be saved.",
+        tone: "error"
+      });
+    } finally {
+      setSavingGoalId(undefined);
+    }
   };
 
   const startEditingGoal = (goal: UserGoal) => {
@@ -1218,7 +1284,7 @@ function App() {
     });
   };
 
-  const handleSaveGoal = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveGoal = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingGoalId) {
       return;
@@ -1249,54 +1315,104 @@ function App() {
       changes.push(goalHistoryItem(goalDraft.status === "archived" ? "archived" : "edited", `Status changed to ${goalDraft.status}.`));
     }
 
-    setGoals((currentGoals) =>
-      currentGoals.map((goal) =>
-        goal.goalId === editingGoalId
-          ? {
-              ...goal,
-              title,
-              category: goalDraft.category,
-              priority: goalDraft.priority,
-              status: goalDraft.status,
-              description
-            }
-          : goal
-      )
-    );
+    setSavingGoalId(editingGoalId);
+    setGoalsNotice(undefined);
 
-    if (changes.length > 0) {
-      setGoalHistory((currentHistory) => ({
-        ...currentHistory,
-        [editingGoalId]: [...(currentHistory[editingGoalId] ?? []), ...changes]
-      }));
+    try {
+      const response = await updateGoalRequest(editingGoalId, {
+        title,
+        category: goalDraft.category,
+        priority: goalDraft.priority,
+        status: goalDraft.status,
+        description
+      });
+      setGoals((currentGoals) =>
+        currentGoals.map((goal) => (goal.goalId === editingGoalId ? response.data.goal : goal))
+      );
+
+      if (changes.length > 0) {
+        setGoalHistory((currentHistory) => ({
+          ...currentHistory,
+          [editingGoalId]: [...(currentHistory[editingGoalId] ?? []), ...changes]
+        }));
+      }
+
+      setEditingGoalId(undefined);
+      setGoalsNotice({ message: "Goal updated.", tone: "success" });
+    } catch (error) {
+      setGoalsNotice({
+        message: error instanceof Error ? error.message : "Goal could not be updated.",
+        tone: "error"
+      });
+    } finally {
+      setSavingGoalId(undefined);
     }
-
-    setEditingGoalId(undefined);
   };
 
-  const archiveGoal = (goalId: string) => {
-    setGoals((currentGoals) =>
-      currentGoals.map((goal) => (goal.goalId === goalId ? { ...goal, status: "archived" } : goal))
-    );
-    setGoalHistory((currentHistory) => ({
-      ...currentHistory,
-      [goalId]: [...(currentHistory[goalId] ?? []), goalHistoryItem("archived", "Goal moved to archived.")]
-    }));
-  };
-
-  const deleteGoal = (goalId: string) => {
+  const archiveGoal = async (goalId: string) => {
     const goal = goals.find((item) => item.goalId === goalId);
-    if (!goal || !window.confirm(`Delete goal "${goal.title}"? This is local-only for now.`)) {
+    if (!goal) {
       return;
     }
 
-    setGoalHistory((currentHistory) => ({
-      ...currentHistory,
-      [goalId]: [...(currentHistory[goalId] ?? []), goalHistoryItem("deleted", "Goal deleted locally.")]
-    }));
-    setGoals((currentGoals) => currentGoals.filter((item) => item.goalId !== goalId));
-    if (editingGoalId === goalId) {
-      setEditingGoalId(undefined);
+    const nextStatus = goal.status === "archived" ? "active" : "archived";
+    setSavingGoalId(goalId);
+    setGoalsNotice(undefined);
+
+    try {
+      const response = await updateGoalRequest(goalId, {
+        title: goal.title,
+        description: goal.description,
+        category: goal.category,
+        priority: goal.priority,
+        status: nextStatus
+      });
+      setGoals((currentGoals) => currentGoals.map((item) => (item.goalId === goalId ? response.data.goal : item)));
+      setGoalHistory((currentHistory) => ({
+        ...currentHistory,
+        [goalId]: [
+          ...(currentHistory[goalId] ?? []),
+          goalHistoryItem(nextStatus === "archived" ? "archived" : "status_changed", nextStatus === "archived" ? "Goal moved to archived." : "Goal restored to active.")
+        ]
+      }));
+      setGoalsNotice({ message: nextStatus === "archived" ? "Goal archived." : "Goal restored.", tone: "success" });
+    } catch (error) {
+      setGoalsNotice({
+        message: error instanceof Error ? error.message : "Goal status could not be updated.",
+        tone: "error"
+      });
+    } finally {
+      setSavingGoalId(undefined);
+    }
+  };
+
+  const deleteGoal = async (goalId: string) => {
+    const goal = goals.find((item) => item.goalId === goalId);
+    if (!goal || !window.confirm(`Delete goal "${goal.title}"? This removes it from Goals.`)) {
+      return;
+    }
+
+    setSavingGoalId(goalId);
+    setGoalsNotice(undefined);
+
+    try {
+      await deleteGoalRequest(goalId);
+      setGoalHistory((currentHistory) => ({
+        ...currentHistory,
+        [goalId]: [...(currentHistory[goalId] ?? []), goalHistoryItem("deleted", isRealMode() ? "Goal deleted from AWS." : "Goal deleted locally.")]
+      }));
+      setGoals((currentGoals) => currentGoals.filter((item) => item.goalId !== goalId));
+      if (editingGoalId === goalId) {
+        setEditingGoalId(undefined);
+      }
+      setGoalsNotice({ message: "Goal deleted.", tone: "success" });
+    } catch (error) {
+      setGoalsNotice({
+        message: error instanceof Error ? error.message : "Goal could not be deleted.",
+        tone: "error"
+      });
+    } finally {
+      setSavingGoalId(undefined);
     }
   };
 
@@ -1597,8 +1713,8 @@ function App() {
 	              />
 	            </label>
 	            <div className="inline-actions">
-	              <button className="secondary-action" type="submit" disabled={newGoal.title.trim().length === 0}>
-	                Save goal
+	              <button className="secondary-action" type="submit" disabled={newGoal.title.trim().length === 0 || savingGoalId === "new"}>
+	                {savingGoalId === "new" ? "Saving..." : "Save goal"}
 	              </button>
 	              <button type="button" onClick={() => setIsGoalFormOpen(false)}>
 	                Cancel
@@ -1960,13 +2076,17 @@ function App() {
                 <p className="eyebrow">Context</p>
                 <h1 id="goals-title">Goals</h1>
               </div>
-              <button className="secondary-action" type="button" onClick={() => setIsGoalFormOpen((isOpen) => !isOpen)}>
+              <button className="secondary-action" type="button" onClick={() => setIsGoalFormOpen(true)} disabled={savingGoalId === "new"}>
                 + Create goal
               </button>
 	            </div>
 	            <p className="hero-note">
 	              Goals guide future document reviews, search, and recommendations.
 	            </p>
+	            <div className={`inline-notice ${goalsNotice?.tone ?? "neutral"}`}>
+	              <span>{isLoadingGoals ? "Loading goals..." : goalsSource}</span>
+	              {goalsNotice ? <small>{goalsNotice.message}</small> : null}
+	            </div>
 	            <div className="goal-status-guide" aria-label="Goal status meaning">
 	              <span><strong>Active</strong> used for intelligence</span>
 	              <span><strong>Future</strong> saved but not active yet</span>
@@ -2054,9 +2174,11 @@ function App() {
                         />
                       </label>
                       <div className="inline-actions">
-	                        <button className="secondary-action" type="submit">Save</button>
+	                        <button className="secondary-action" type="submit" disabled={savingGoalId === goal.goalId}>
+                            {savingGoalId === goal.goalId ? "Saving..." : "Save"}
+                          </button>
 	                        <button type="button" onClick={() => setEditingGoalId(undefined)}>Cancel</button>
-	                        <button className="danger-action" type="button" onClick={() => deleteGoal(goal.goalId)}>Delete</button>
+	                        <button className="danger-action" type="button" onClick={() => void deleteGoal(goal.goalId)} disabled={savingGoalId === goal.goalId}>Delete</button>
 	                      </div>
 	                    </form>
                   ) : (
@@ -2068,15 +2190,17 @@ function App() {
                         </div>
 	                        <div className="inline-actions">
 	                          <button type="button" onClick={() => startEditingGoal(goal)}>Edit</button>
-	                          <button type="button" onClick={() => archiveGoal(goal.goalId)}>Archive</button>
-	                          <button className="danger-action" type="button" onClick={() => deleteGoal(goal.goalId)}>Delete</button>
+	                          <button type="button" onClick={() => void archiveGoal(goal.goalId)} disabled={savingGoalId === goal.goalId}>
+                            {goal.status === "archived" ? "Unarchive" : "Archive"}
+                          </button>
+	                          <button className="danger-action" type="button" onClick={() => void deleteGoal(goal.goalId)} disabled={savingGoalId === goal.goalId}>Delete</button>
 	                        </div>
 	                      </div>
 	                      <p>{goal.description}</p>
 	                      <div className="goal-meta-row">
 	                        <span className={`priority ${priorityView(goal.priority).className}`}>{priorityView(goal.priority).label}</span>
 	                        <span className="status">{goal.status}</span>
-	                        <time>Updated {formatDateTime((goalHistory[goal.goalId] ?? []).at(-1)?.at)}</time>
+	                        <time>Updated {formatDateTime(goal.updatedAt ?? (goalHistory[goal.goalId] ?? []).at(-1)?.at)}</time>
 	                      </div>
 	                    </>
 	                  )}
@@ -2344,7 +2468,7 @@ function App() {
                     "No Textract",
                     "No Bedrock enabled",
                     "Upload/read/delete APIs active",
-                    "Goals and projects stay local for now"
+                    "Goals prepared for DynamoDB persistence"
                   ].map((item) => (
                     <li key={item}>{item}</li>
                   ))}
@@ -2360,6 +2484,7 @@ function App() {
                     "Jobs read Lambda",
                     "S3 archive bucket",
                     "DynamoDB jobs table",
+                    "DynamoDB goals table",
                     "CloudWatch logs"
                   ].map((item) => (
                     <li key={item}>{item}</li>

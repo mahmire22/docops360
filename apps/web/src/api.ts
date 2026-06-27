@@ -1,11 +1,17 @@
 import type {
   ApiResponse,
+  CreateGoalRequest,
   CreateUploadRequest,
+  CreateGoalResponse,
   CreateUploadResponse,
+  DeleteGoalResponse,
   DeleteJobResponse,
   GetJobResponse,
   JobRecord,
-  ListJobsResponse
+  ListGoalsResponse,
+  UpdateGoalRequest,
+  ListJobsResponse,
+  UpdateGoalResponse
 } from "@docops360/shared";
 
 const documentBucketName = "docops360-dev-invoice-ingest-local";
@@ -158,6 +164,150 @@ export const deleteJobRequest = async (jobId: string): Promise<ApiResponse<Delet
   }
 
   return response.json() as Promise<ApiResponse<DeleteJobResponse>>;
+};
+
+export const listGoalsRequest = async (): Promise<ApiResponse<ListGoalsResponse>> => {
+  if (!isRealMode()) {
+    return {
+      data: { goals: [] },
+      requestId: crypto.randomUUID()
+    };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/goals`);
+  } catch {
+    throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
+  }
+
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 405) {
+      throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
+    }
+
+    throw new Error(`List goals failed with ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json() as Promise<ApiResponse<ListGoalsResponse>>;
+};
+
+export const createGoalRequest = async (
+  request: CreateGoalRequest
+): Promise<ApiResponse<CreateGoalResponse>> => {
+  if (!isRealMode()) {
+    const now = new Date().toISOString();
+    return {
+      data: {
+        goal: {
+          goalId: `goal_local_${crypto.randomUUID()}`,
+          title: request.title,
+          category: request.category ?? "others",
+          status: request.status ?? "active",
+          priority: request.priority ?? "normal",
+          description: request.description ?? "",
+          createdAt: now,
+          updatedAt: now,
+          archivedAt: request.status === "archived" ? now : undefined
+        }
+      },
+      requestId: crypto.randomUUID()
+    };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/goals`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    });
+  } catch {
+    throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
+  }
+
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 405) {
+      throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
+    }
+
+    throw new Error(`Create goal failed with ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json() as Promise<ApiResponse<CreateGoalResponse>>;
+};
+
+export const updateGoalRequest = async (
+  goalId: string,
+  request: UpdateGoalRequest
+): Promise<ApiResponse<UpdateGoalResponse>> => {
+  if (!isRealMode()) {
+    const now = new Date().toISOString();
+    return {
+      data: {
+        goal: {
+          goalId,
+          title: request.title ?? "Untitled goal",
+          category: request.category ?? "others",
+          status: request.status ?? "active",
+          priority: request.priority ?? "normal",
+          description: request.description ?? "",
+          updatedAt: now,
+          archivedAt: request.status === "archived" ? now : undefined
+        }
+      },
+      requestId: crypto.randomUUID()
+    };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/goals/${encodeURIComponent(goalId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request)
+    });
+  } catch {
+    throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
+  }
+
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 405) {
+      throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
+    }
+
+    throw new Error(`Update goal failed with ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json() as Promise<ApiResponse<UpdateGoalResponse>>;
+};
+
+export const deleteGoalRequest = async (goalId: string): Promise<ApiResponse<DeleteGoalResponse>> => {
+  if (!isRealMode()) {
+    return {
+      data: { goalId },
+      requestId: crypto.randomUUID()
+    };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/goals/${encodeURIComponent(goalId)}`, {
+      method: "DELETE"
+    });
+  } catch {
+    throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
+  }
+
+  if (!response.ok) {
+    if (response.status === 404 || response.status === 405) {
+      throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
+    }
+
+    throw new Error(`Delete goal failed with ${response.status}: ${await response.text()}`);
+  }
+
+  return response.json() as Promise<ApiResponse<DeleteGoalResponse>>;
 };
 
 export const isTerminalStatus = (status: JobRecord["status"]) =>

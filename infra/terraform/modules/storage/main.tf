@@ -41,6 +41,21 @@ resource "aws_s3_bucket_cors_configuration" "documents" {
   }
 }
 
+resource "aws_dynamodb_table" "goals" {
+  name         = "${var.name_prefix}-${var.environment}-goals"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "goalId"
+
+  attribute {
+    name = "goalId"
+    type = "S"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+}
+
 resource "aws_dynamodb_table" "jobs" {
   name         = "${var.name_prefix}-${var.environment}-jobs"
   billing_mode = "PAY_PER_REQUEST"

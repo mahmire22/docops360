@@ -17,3 +17,13 @@ output "jobs_table_arn" {
   description = "ARN of the DynamoDB table used for document job status."
   value       = aws_dynamodb_table.jobs.arn
 }
+
+output "goals_table_name" {
+  description = "DynamoDB table used for persisted goals."
+  value       = aws_dynamodb_table.goals.name
+}
+
+output "goals_table_arn" {
+  description = "ARN of the DynamoDB table used for persisted goals."
+  value       = aws_dynamodb_table.goals.arn
+}

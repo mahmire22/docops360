@@ -35,3 +35,18 @@ output "jobs_delete_route" {
   description = "Route prepared for deleting a document job and its associated S3 object."
   value       = "DELETE ${module.api.http_api_endpoint}/jobs/{jobId}"
 }
+
+output "goals_table_name" {
+  description = "DynamoDB table used for persisted goals."
+  value       = module.storage.goals_table_name
+}
+
+output "goals_routes" {
+  description = "Routes used to manage persisted goals."
+  value = [
+    "GET ${module.api.http_api_endpoint}/goals",
+    "POST ${module.api.http_api_endpoint}/goals",
+    "PATCH ${module.api.http_api_endpoint}/goals/{goalId}",
+    "DELETE ${module.api.http_api_endpoint}/goals/{goalId}"
+  ]
+}

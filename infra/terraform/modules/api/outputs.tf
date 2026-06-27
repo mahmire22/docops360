@@ -22,3 +22,8 @@ output "jobs_lambda_name" {
   description = "Name of the jobs read Lambda function."
   value       = aws_lambda_function.jobs_handler.function_name
 }
+
+output "goals_lambda_name" {
+  description = "Name of the goals persistence Lambda function."
+  value       = aws_lambda_function.goals_handler.function_name
+}

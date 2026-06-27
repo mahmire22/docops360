@@ -208,6 +208,41 @@ export interface UserGoal {
   priority: SignalPriority;
   targetDate?: string;
   description: string;
+  createdAt?: string;
+  updatedAt?: string;
+  archivedAt?: string;
+}
+
+export interface ListGoalsResponse {
+  goals: UserGoal[];
+}
+
+export interface CreateGoalRequest {
+  title: string;
+  description?: string;
+  status?: UserGoalStatus;
+  category?: UserGoalCategory;
+  priority?: SignalPriority;
+}
+
+export interface CreateGoalResponse {
+  goal: UserGoal;
+}
+
+export interface UpdateGoalRequest {
+  title?: string;
+  description?: string;
+  status?: UserGoalStatus;
+  category?: UserGoalCategory;
+  priority?: SignalPriority;
+}
+
+export interface UpdateGoalResponse {
+  goal: UserGoal;
+}
+
+export interface DeleteGoalResponse {
+  goalId: string;
 }
 
 export type EvidenceSourceType =
