@@ -130,3 +130,10 @@ These tools should read DocOps360 evidence and context first, then optionally ca
 - Destructive actions require confirmation in the UI.
 - Secrets are not stored in the repository.
 - Future phases can add KMS refinements, Cognito authentication, and Secrets Manager for managed service credentials.
+
+
+## Authentication Foundation
+
+Phase 6A.1 adds Cognito as the personal-data boundary for the single-owner MVP. Browser-facing API Gateway routes for uploads, jobs, archive delete, and goals are prepared to require Cognito JWT authorization. The S3 event worker remains an internal AWS trigger and is not exposed through the browser API.
+
+Cognito uses managed login with authorization-code flow and PKCE. Public self-sign-up is disabled; the owner account is created/admin-invited manually after Terraform apply. See `docs/authentication.md` for the exact setup runbook.

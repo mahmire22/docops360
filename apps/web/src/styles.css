@@ -2409,3 +2409,49 @@ select option {
   border-color: rgba(255, 137, 137, 0.35);
   color: #ffd2d2;
 }
+
+.auth-shell {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(57, 221, 163, 0.12), transparent 34%),
+    #071412;
+  color: #f1f7f5;
+  display: flex;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.auth-card {
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 8px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.26);
+  margin: 0 auto;
+  max-width: 520px;
+  padding: 32px;
+}
+
+.auth-card h1 {
+  font-size: 2.2rem;
+  margin: 14px 0 12px;
+}
+
+.auth-card p {
+  color: rgba(241, 247, 245, 0.76);
+  line-height: 1.6;
+}
+
+.auth-card .secondary-action {
+  margin-top: 18px;
+}
+
+.auth-message {
+  color: #9ee8c9;
+  margin-top: 16px;
+}
+
+.auth-card small {
+  color: rgba(241, 247, 245, 0.54);
+  display: block;
+  margin-top: 18px;
+}

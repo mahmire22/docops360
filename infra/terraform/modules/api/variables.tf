@@ -23,6 +23,16 @@ variable "goals_table_name" {
   type        = string
 }
 
+variable "jwt_audience" {
+  description = "Accepted JWT audiences for the API Gateway authorizer."
+  type        = list(string)
+}
+
+variable "jwt_issuer" {
+  description = "JWT issuer URL for the API Gateway authorizer."
+  type        = string
+}
+
 variable "jobs_table_arn" {
   description = "ARN of the DynamoDB jobs table."
   type        = string

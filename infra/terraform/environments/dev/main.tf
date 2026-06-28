@@ -41,12 +41,24 @@ module "storage" {
   name_prefix = var.name_prefix
 }
 
+module "auth" {
+  source = "../../modules/auth"
+
+  aws_region    = var.aws_region
+  callback_urls = var.cognito_callback_urls
+  environment   = var.environment
+  logout_urls   = var.cognito_logout_urls
+  name_prefix   = var.name_prefix
+}
+
 module "api" {
   source = "../../modules/api"
 
   document_bucket_arn        = module.storage.document_bucket_arn
   document_bucket_name       = module.storage.document_bucket_name
   environment                = var.environment
+  jwt_audience               = [module.auth.app_client_id]
+  jwt_issuer                 = module.auth.issuer_url
   goals_table_arn            = module.storage.goals_table_arn
   goals_table_name           = module.storage.goals_table_name
   jobs_table_arn             = module.storage.jobs_table_arn

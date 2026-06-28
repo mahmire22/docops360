@@ -308,10 +308,22 @@ resource "aws_apigatewayv2_api" "http" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_headers = ["content-type"]
+    allow_headers = ["authorization", "content-type"]
     allow_methods = ["DELETE", "GET", "OPTIONS", "PATCH", "POST"]
     allow_origins = ["*"]
     max_age       = 300
+  }
+}
+
+resource "aws_apigatewayv2_authorizer" "cognito_jwt" {
+  api_id           = aws_apigatewayv2_api.http.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "${var.name_prefix}-${var.environment}-cognito-jwt"
+
+  jwt_configuration {
+    audience = var.jwt_audience
+    issuer   = var.jwt_issuer
   }
 }
 
@@ -356,51 +368,67 @@ resource "aws_apigatewayv2_integration" "goals_handler" {
 }
 
 resource "aws_apigatewayv2_route" "create_upload" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "POST /uploads"
-  target    = "integrations/${aws_apigatewayv2_integration.upload_handler.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  route_key          = "POST /uploads"
+  target             = "integrations/${aws_apigatewayv2_integration.upload_handler.id}"
 }
 
 resource "aws_apigatewayv2_route" "list_jobs" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "GET /jobs"
-  target    = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  route_key          = "GET /jobs"
+  target             = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
 }
 
 resource "aws_apigatewayv2_route" "get_job" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "GET /jobs/{jobId}"
-  target    = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  route_key          = "GET /jobs/{jobId}"
+  target             = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
 }
 
 resource "aws_apigatewayv2_route" "delete_job" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "DELETE /jobs/{jobId}"
-  target    = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  route_key          = "DELETE /jobs/{jobId}"
+  target             = "integrations/${aws_apigatewayv2_integration.jobs_handler.id}"
 }
 
 resource "aws_apigatewayv2_route" "list_goals" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "GET /goals"
-  target    = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  route_key          = "GET /goals"
+  target             = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
 }
 
 resource "aws_apigatewayv2_route" "create_goal" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "POST /goals"
-  target    = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  route_key          = "POST /goals"
+  target             = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
 }
 
 resource "aws_apigatewayv2_route" "update_goal" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "PATCH /goals/{goalId}"
-  target    = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  route_key          = "PATCH /goals/{goalId}"
+  target             = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
 }
 
 resource "aws_apigatewayv2_route" "delete_goal" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "DELETE /goals/{goalId}"
-  target    = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  route_key          = "DELETE /goals/{goalId}"
+  target             = "integrations/${aws_apigatewayv2_integration.goals_handler.id}"
 }
 
 resource "aws_lambda_permission" "allow_http_api" {

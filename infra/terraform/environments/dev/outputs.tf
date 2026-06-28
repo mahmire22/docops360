@@ -50,3 +50,24 @@ output "goals_routes" {
     "DELETE ${module.api.http_api_endpoint}/goals/{goalId}"
   ]
 }
+
+
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID for the single-owner DocOps360 MVP."
+  value       = module.auth.user_pool_id
+}
+
+output "cognito_app_client_id" {
+  description = "Cognito browser SPA app client ID."
+  value       = module.auth.app_client_id
+}
+
+output "cognito_hosted_ui_base_url" {
+  description = "Cognito managed login base URL."
+  value       = module.auth.hosted_ui_base_url
+}
+
+output "cognito_issuer_url" {
+  description = "Cognito JWT issuer URL used by API Gateway."
+  value       = module.auth.issuer_url
+}

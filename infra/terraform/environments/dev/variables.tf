@@ -27,3 +27,22 @@ variable "upload_url_expires_seconds" {
   type        = number
   default     = 600
 }
+
+
+variable "cognito_callback_urls" {
+  description = "Allowed Cognito callback URLs for local/browser development."
+  type        = list(string)
+  default = [
+    "http://127.0.0.1:5173/",
+    "http://localhost:5173/"
+  ]
+}
+
+variable "cognito_logout_urls" {
+  description = "Allowed Cognito logout URLs for local/browser development."
+  type        = list(string)
+  default = [
+    "http://127.0.0.1:5173/",
+    "http://localhost:5173/"
+  ]
+}

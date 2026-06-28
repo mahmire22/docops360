@@ -34,9 +34,22 @@ import {
   isTerminalStatus,
   listGoalsRequest,
   listJobsRequest,
+  setApiAccessTokenProvider,
+  setApiAuthFailureHandler,
   updateGoalRequest,
   uploadFileToTarget
 } from "./api";
+import type { AuthSession } from "./auth";
+import {
+  authConfigurationMessage,
+  clearAuthSession,
+  getStoredAuthSession,
+  handleAuthRedirect,
+  isCognitoAuthConfigured,
+  isLocalAuthBypass,
+  signInWithCognito,
+  signOutFromCognito
+} from "./auth";
 import "./styles.css";
 
 interface OperationsJob extends JobRecord {
@@ -827,8 +840,13 @@ function App() {
   const [documentSourceFilter, setDocumentSourceFilter] = useState<ArchiveSourceFilter>("all");
   const [archiveNotice, setArchiveNotice] = useState<{ message: string; tone: "success" | "error" }>();
   const [deletingJobId, setDeletingJobId] = useState<string | undefined>();
+  const [authSession, setAuthSession] = useState<AuthSession | undefined>(() => getStoredAuthSession());
+  const [isAuthLoading, setIsAuthLoading] = useState(isRealMode() && !isLocalAuthBypass());
+  const [authMessage, setAuthMessage] = useState<string | undefined>();
   const uploadNoticeTimeout = useRef<number | undefined>();
   const assistantInputRef = useRef<HTMLInputElement>(null);
+  const authRequired = isRealMode() && !isLocalAuthBypass();
+  const canUsePersonalApi = !authRequired || Boolean(authSession);
   const completed = jobs.filter((job) => job.status === "completed").length;
   const review = jobs.filter((job) => job.status === "review_required").length;
   const failed = jobs.filter((job) => job.status === "failed").length;
@@ -946,6 +964,20 @@ function App() {
   ];
   const latestAuditBundles = operationalBundles.slice(0, 5);
 
+  const handleSignIn = async () => {
+    try {
+      setAuthMessage(undefined);
+      await signInWithCognito();
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : "Sign-in could not start.");
+    }
+  };
+
+  const handleSignOut = () => {
+    setAuthSession(undefined);
+    signOutFromCognito();
+  };
+
   const showUploadNotice = (message: string, tone: "success" | "error" | "neutral", duration = 4200) => {
     if (uploadNoticeTimeout.current) {
       window.clearTimeout(uploadNoticeTimeout.current);
@@ -973,6 +1005,50 @@ function App() {
     mergeJobsFromApi(response.data.jobs);
     return response.data.jobs;
   };
+
+  useEffect(() => {
+    setApiAccessTokenProvider(() => authSession?.accessToken);
+    setApiAuthFailureHandler(() => {
+      clearAuthSession();
+      setAuthSession(undefined);
+      setAuthMessage("Your session expired or is not authorized. Please sign in again.");
+    });
+  }, [authSession]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const initialiseAuth = async () => {
+      if (!authRequired) {
+        setIsAuthLoading(false);
+        return;
+      }
+
+      try {
+        const session = await handleAuthRedirect();
+        if (!cancelled) {
+          setAuthSession(session);
+          setAuthMessage(undefined);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          clearAuthSession();
+          setAuthSession(undefined);
+          setAuthMessage(error instanceof Error ? error.message : "Sign-in could not be completed.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsAuthLoading(false);
+        }
+      }
+    };
+
+    void initialiseAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authRequired]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setCurrentTime(new Date()), 1000);
@@ -1005,7 +1081,7 @@ function App() {
   }, [isGoalFormOpen, isProjectFormOpen]);
 
   useEffect(() => {
-    if (!isRealMode()) {
+    if (!isRealMode() || !canUsePersonalApi) {
       return;
     }
 
@@ -1020,11 +1096,11 @@ function App() {
 
         mergeJobsFromApi(response.data.jobs);
       } catch (error) {
-        setJobSource("Local fallback until read API is deployed");
+        setJobSource("Read API unavailable");
         setUploadStatus(
           error instanceof Error
-            ? `Read API unavailable; using local fallback (${error.message})`
-            : "Read API unavailable; using local fallback"
+            ? `Read API unavailable (${error.message})`
+            : "Read API unavailable"
         );
       }
     };
@@ -1034,10 +1110,10 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canUsePersonalApi]);
 
   const pollJobUntilTerminal = async (jobId: string) => {
-    if (!isRealMode()) {
+    if (!isRealMode() || !canUsePersonalApi) {
       return;
     }
 
@@ -1070,6 +1146,14 @@ function App() {
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) {
+      return;
+    }
+
+    if (isRealMode() && !canUsePersonalApi) {
+      const message = "Sign in is required before uploading documents.";
+      setUploadStatus(message);
+      showUploadNotice(message, "error", 6000);
+      event.target.value = "";
       return;
     }
 
@@ -1185,6 +1269,12 @@ function App() {
       return;
     }
 
+    if (!canUsePersonalApi) {
+      setGoalsSource("Sign in required");
+      setGoalsNotice(undefined);
+      return;
+    }
+
     setIsLoadingGoals(true);
     try {
       const response = await listGoalsRequest();
@@ -1193,9 +1283,9 @@ function App() {
       setGoalsSource("Live goals API");
       setGoalsNotice(undefined);
     } catch (error) {
-      setGoalsSource("Local fallback");
+      setGoalsSource("Goals API unavailable");
       setGoalsNotice({
-        message: error instanceof Error ? error.message : "Goals API is unavailable. Showing local fallback.",
+        message: error instanceof Error ? error.message : "Goals API is unavailable.",
         tone: "error"
       });
     } finally {
@@ -1205,13 +1295,13 @@ function App() {
 
   useEffect(() => {
     void refreshGoals();
-  }, []);
+  }, [canUsePersonalApi]);
 
   useEffect(() => {
     if (view === "goals") {
       void refreshGoals();
     }
-  }, [view]);
+  }, [canUsePersonalApi, view]);
 
   const handleNewChat = () => {
     const createdAt = nowIso();
@@ -1492,6 +1582,31 @@ function App() {
     }
   };
 
+  if (authRequired && (isAuthLoading || !authSession)) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-card" aria-labelledby="auth-title">
+          <span className="brand-mark">D360</span>
+          <p className="eyebrow">DocOps360</p>
+          <h1 id="auth-title">Sign in to your personal workspace</h1>
+          <p>
+            Archive metadata, uploads, jobs, and goals are private to the single-owner MVP and require Cognito sign-in.
+          </p>
+          {isAuthLoading ? <p className="auth-message">Completing sign-in...</p> : null}
+          {!isAuthLoading ? (
+            <button className="secondary-action" type="button" onClick={() => void handleSignIn()} disabled={!isCognitoAuthConfigured()}>
+              Sign in with Cognito
+            </button>
+          ) : null}
+          <p className="auth-message">{authMessage ?? authConfigurationMessage()}</p>
+          <small>
+            Local development without Cognito must be explicitly started with VITE_AUTH_MODE=local or mock mode.
+          </small>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="DocOps360 navigation">
@@ -1576,7 +1691,7 @@ function App() {
             <button type="button">Profile</button>
             <button type="button">Settings</button>
             <button type="button">Help</button>
-            <button disabled type="button">Logout</button>
+            <button type="button" onClick={handleSignOut}>{authRequired ? "Sign out" : "Logout"}</button>
           </details>
         </section>
 	      </aside>
@@ -2258,7 +2373,11 @@ function App() {
                   </div>
                   <div>
                     <dt>API status</dt>
-                    <dd>{jobSource.includes("Live") ? "API connected" : "Fallback"}</dd>
+                    <dd>{jobSource.includes("Live") ? "API connected" : "Awaiting authenticated API"}</dd>
+                  </div>
+                  <div>
+                    <dt>Authentication</dt>
+                    <dd>{authRequired ? (authSession ? "Signed in" : "Cognito required") : "Local development"}</dd>
                   </div>
                   <div>
                     <dt>Upload pipeline</dt>
@@ -2467,7 +2586,8 @@ function App() {
                     "metadata_only extraction",
                     "No Textract",
                     "No Bedrock enabled",
-                    "Upload/read/delete APIs active",
+                    "Cognito JWT protection prepared",
+                    "Upload/read/delete APIs protected after apply",
                     "Goals prepared for DynamoDB persistence"
                   ].map((item) => (
                     <li key={item}>{item}</li>
@@ -2479,6 +2599,8 @@ function App() {
                 <ul className="system-placeholder-list">
                   {[
                     "API Gateway HTTP API",
+                    "Cognito User Pool",
+                    "Cognito browser SPA app client",
                     "Upload Lambda",
                     "Processing worker Lambda",
                     "Jobs read Lambda",
@@ -2517,6 +2639,8 @@ function App() {
                     "Presigned S3 upload",
                     "Private bucket",
                     "Least-privilege IAM",
+                    "Cognito managed login with PKCE",
+                    "JWT authorizer on personal-data API routes",
                     "No frontend AWS keys",
                     "Delete by jobId only",
                     "Confirmation for destructive actions",

@@ -9,14 +9,35 @@ import type {
   GetJobResponse,
   JobRecord,
   ListGoalsResponse,
-  UpdateGoalRequest,
   ListJobsResponse,
+  UpdateGoalRequest,
   UpdateGoalResponse
 } from "@docops360/shared";
 
 const documentBucketName = "docops360-dev-invoice-ingest-local";
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
 const uploadMode = import.meta.env.VITE_UPLOAD_MODE ?? (apiBaseUrl ? "real" : "mock");
+
+type AccessTokenProvider = () => string | undefined;
+type AuthFailureHandler = () => void;
+
+let accessTokenProvider: AccessTokenProvider = () => undefined;
+let authFailureHandler: AuthFailureHandler | undefined;
+
+export class ApiAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApiAuthError";
+  }
+}
+
+export const setApiAccessTokenProvider = (provider: AccessTokenProvider) => {
+  accessTokenProvider = provider;
+};
+
+export const setApiAuthFailureHandler = (handler: AuthFailureHandler) => {
+  authFailureHandler = handler;
+};
 
 const normaliseFileName = (fileName: string) =>
   fileName
@@ -60,6 +81,32 @@ export const getUploadMode = () => uploadMode;
 
 export const isRealMode = () => uploadMode !== "mock" && Boolean(apiBaseUrl);
 
+const apiFetch = async (path: string, init: RequestInit = {}): Promise<Response> => {
+  if (!isRealMode() || !apiBaseUrl) {
+    throw new Error("API requests are disabled in mock mode.");
+  }
+
+  const token = accessTokenProvider();
+  if (!token) {
+    throw new ApiAuthError("Sign in is required to access DocOps360 personal data.");
+  }
+
+  const headers = new Headers(init.headers);
+  headers.set("authorization", `Bearer ${token}`);
+
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    headers
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    authFailureHandler?.();
+    throw new ApiAuthError("Your session expired or is not authorized. Please sign in again.");
+  }
+
+  return response;
+};
+
 export const createUploadRequest = async (
   request: CreateUploadRequest
 ): Promise<ApiResponse<CreateUploadResponse>> => {
@@ -67,7 +114,7 @@ export const createUploadRequest = async (
     return createMockUploadRequest(request);
   }
 
-  const response = await fetch(`${apiBaseUrl}/uploads`, {
+  const response = await apiFetch("/uploads", {
     method: "POST",
     headers: {
       "content-type": "application/json"
@@ -113,7 +160,7 @@ export const listJobsRequest = async (): Promise<ApiResponse<ListJobsResponse>> 
     };
   }
 
-  const response = await fetch(`${apiBaseUrl}/jobs`);
+  const response = await apiFetch("/jobs");
   if (!response.ok) {
     throw new Error(`List jobs failed with ${response.status}: ${await response.text()}`);
   }
@@ -126,7 +173,7 @@ export const getJobRequest = async (jobId: string): Promise<ApiResponse<GetJobRe
     throw new Error("Job polling is disabled in mock mode.");
   }
 
-  const response = await fetch(`${apiBaseUrl}/jobs/${encodeURIComponent(jobId)}`);
+  const response = await apiFetch(`/jobs/${encodeURIComponent(jobId)}`);
   if (!response.ok) {
     throw new Error(`Get job failed with ${response.status}: ${await response.text()}`);
   }
@@ -148,10 +195,13 @@ export const deleteJobRequest = async (jobId: string): Promise<ApiResponse<Delet
 
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}/jobs/${encodeURIComponent(jobId)}`, {
+    response = await apiFetch(`/jobs/${encodeURIComponent(jobId)}`, {
       method: "DELETE"
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      throw error;
+    }
     throw new Error("Delete API is not deployed yet. Apply Terraform after review.");
   }
 
@@ -176,8 +226,11 @@ export const listGoalsRequest = async (): Promise<ApiResponse<ListGoalsResponse>
 
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}/goals`);
-  } catch {
+    response = await apiFetch("/goals");
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      throw error;
+    }
     throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
   }
 
@@ -217,12 +270,15 @@ export const createGoalRequest = async (
 
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}/goals`, {
+    response = await apiFetch("/goals", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request)
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      throw error;
+    }
     throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
   }
 
@@ -262,12 +318,15 @@ export const updateGoalRequest = async (
 
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}/goals/${encodeURIComponent(goalId)}`, {
+    response = await apiFetch(`/goals/${encodeURIComponent(goalId)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request)
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      throw error;
+    }
     throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
   }
 
@@ -292,10 +351,13 @@ export const deleteGoalRequest = async (goalId: string): Promise<ApiResponse<Del
 
   let response: Response;
   try {
-    response = await fetch(`${apiBaseUrl}/goals/${encodeURIComponent(goalId)}`, {
+    response = await apiFetch(`/goals/${encodeURIComponent(goalId)}`, {
       method: "DELETE"
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiAuthError) {
+      throw error;
+    }
     throw new Error("Goals API is not deployed yet. Apply Terraform after review.");
   }
 
